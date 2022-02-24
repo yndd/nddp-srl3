@@ -136,7 +136,7 @@ func (s *server) UpdateCache(prefix *gnmi.Path, u *gnmi.Update) error {
 	if err != nil {
 		return err
 	}
-	n, err := s.cache.GetNotificationFromUpdate(prefix, u, hasKey)
+	n, err := s.cache.GetCache().GetNotificationFromUpdate(prefix, u, hasKey)
 	if err != nil {
 		//log.Debug("GetNotificationFromUpdate Error", "Notification", n, "Error", err)
 		return err
@@ -149,7 +149,7 @@ func (s *server) UpdateCache(prefix *gnmi.Path, u *gnmi.Update) error {
 			}
 		*/
 
-		if err := s.cache.GnmiUpdate(prefix.GetTarget(), n); err != nil {
+		if err := s.cache.GetCache().GnmiUpdate(prefix.GetTarget(), n); err != nil {
 			//log.Debug("GnmiUpdate Error", "Notification", n, "Error", err)
 			return err
 		}
@@ -159,7 +159,7 @@ func (s *server) UpdateCache(prefix *gnmi.Path, u *gnmi.Update) error {
 
 func (s *server) DeleteCache(prefix *gnmi.Path, p *gnmi.Path) error {
 	// delete from config cache
-	n, err := s.cache.GetNotificationFromDelete(prefix, p)
+	n, err := s.cache.GetCache().GetNotificationFromDelete(prefix, p)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (s *server) DeleteCache(prefix *gnmi.Path, p *gnmi.Path) error {
 			s.log.Debug("gnmiserver delete cache", "notification", yparser.GnmiPath2XPath(d, true))
 		}
 	*/
-	if err := s.cache.GnmiUpdate(prefix.GetTarget(), n); err != nil {
+	if err := s.cache.GetCache().GnmiUpdate(prefix.GetTarget(), n); err != nil {
 		return err
 	}
 	return nil
@@ -181,7 +181,7 @@ func (s *server) setUpdateStatus(req *gnmi.SetRequest) error {
 	if strings.HasPrefix(crDeviceName, shared.SystemNamespace) {
 		crSystemDeviceName := crDeviceName
 
-		if !s.cache.GetCache().HasTarget(crSystemDeviceName) {
+		if !s.cache.GetCache().GetCache().HasTarget(crSystemDeviceName) {
 			return status.Error(codes.Unavailable, "cache not ready")
 		}
 
@@ -198,7 +198,7 @@ func (s *server) setUpdateStatus(req *gnmi.SetRequest) error {
 			},
 		}
 
-		if err := s.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+		if err := s.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 			return errors.New("cache update failed")
 		}
 	}

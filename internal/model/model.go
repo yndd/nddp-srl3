@@ -28,13 +28,13 @@ type Model struct {
 	EnumData        GoStructEnumData
 }
 
-func (m *Model) newRootValue() interface{} {
+func (m *Model) NewRootValue() interface{} {
 	return reflect.New(m.StructRootType.Elem()).Interface()
 }
 
 // NewConfigStruct creates a ValidatedGoStruct of this model from jsonConfig. If jsonConfig is nil, creates an empty GoStruct.
 func (m *Model) NewConfigStruct(jsonConfig []byte) (ygot.ValidatedGoStruct, error) {
-	rootStruct, ok := m.newRootValue().(ygot.ValidatedGoStruct)
+	rootStruct, ok := m.NewRootValue().(ygot.ValidatedGoStruct)
 	if !ok {
 		return nil, errors.New("root node is not a ygot.ValidatedGoStruct")
 	}

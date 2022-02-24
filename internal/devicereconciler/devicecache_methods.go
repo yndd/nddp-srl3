@@ -221,7 +221,7 @@ func (r *reconciler) getSpecdata(resource *systemv1alpha1.Gvk) (interface{}, err
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	x1, err := r.cache.GetJson(
+	x1, err := r.cache.GetCache().GetJson(
 		crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{
@@ -285,7 +285,7 @@ func (r *reconciler) getCachedata(resource *systemv1alpha1.Gvk) (interface{}, er
 	if err != nil {
 		return nil, err
 	}
-	x2, err := r.cache.GetJson(
+	x2, err := r.cache.GetCache().GetJson(
 		crDeviceName,
 		&gnmi.Path{Target: crDeviceName},
 		rootPath,

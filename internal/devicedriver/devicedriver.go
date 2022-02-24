@@ -31,9 +31,10 @@ import (
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/resource"
-	"github.com/yndd/ndd-yang/pkg/cache"
+
+	//"github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yentry"
-	"github.com/yndd/ndd-yang/pkg/yparser"
+	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/device"
 	"github.com/yndd/nddp-srl3/internal/device/srl"
 	"github.com/yndd/nddp-srl3/internal/devicecollector"
@@ -112,7 +113,7 @@ type deviceInfo struct {
 	namespace    string
 	target       *target.Target
 	paths        []*string
-	cache        *cache.Cache
+	cache        cache.Cache
 	deviceSchema *yentry.Entry
 	// device info
 	device     device.Device
@@ -121,7 +122,6 @@ type deviceInfo struct {
 	// dynamic discovered data
 	deviceDetails *ndrv1.DeviceDetails
 	initialConfig interface{}
-	model         *model.Model
 	callback      ConfigCallback
 	// chan
 	stopCh chan bool // used to stop the child go routines if the device gets deleted
@@ -132,7 +132,7 @@ type deviceInfo struct {
 type deviceDriver struct {
 	// gnmi target
 	devices      map[string]*deviceInfo
-	cache        *cache.Cache
+	cache        cache.Cache
 	deviceSchema *yentry.Entry
 	// deviceUpdate
 	deviceDriverRequestCh  chan shared.DeviceUpdate
@@ -163,11 +163,8 @@ func New(opts ...Option) DeviceDriver {
 		opt(d)
 	}
 
-	// initialize the device cache
-	d.cache = cache.New(
-		[]string{},
-		cache.WithLogging(d.log),
-	)
+	// initialize the multi-device cache
+	d.cache = cache.New()
 
 	return d
 }
@@ -333,7 +330,7 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	d.printDeviceCapabilities(cap)
 
 	/// initiaize model
-	ddd.model = getModel(cap)
+	d.cache.SetModel(crDeviceName, getModel(cap))
 	ddd.callback = ddd.ygotcallback
 
 	// get device details through gnmi
@@ -344,11 +341,11 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	d.log.Debug("deviceDetails", "info", ddd.deviceDetails)
 
 	// initialize cache with target
-	if !d.cache.GetCache().HasTarget(crDeviceName) {
-		d.cache.GetCache().Add(crDeviceName)
+	if !d.cache.GetCache().GetCache().HasTarget(crDeviceName) {
+		d.cache.GetCache().GetCache().Add(crDeviceName)
 	}
-	if !d.cache.GetCache().HasTarget(crSystemDeviceName) {
-		d.cache.GetCache().Add(crSystemDeviceName)
+	if !d.cache.GetCache().GetCache().HasTarget(crSystemDeviceName) {
+		d.cache.GetCache().GetCache().Add(crSystemDeviceName)
 	}
 
 	// get initial config through gnmi
@@ -371,12 +368,6 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 		d.log.Debug("validateConfig", "error", err)
 		return errors.Wrap(err, "cannot validate config")
 	}
-
-	/*
-		for childName := range d.deviceSchema.GetChildren() {
-			d.log.Debug("device schema", "child", childName)
-		}
-	*/
 
 	// start per device reconciler
 	ddd.reconciler, err = devicereconciler.New(du.TargetConfig, du.Namespace,
@@ -422,8 +413,8 @@ func (d *deviceDriver) deleteDevice(du shared.DeviceUpdate) error {
 	}
 
 	// delete the device from the cache
-	d.cache.GetCache().Remove(crDeviceName)
-	d.cache.GetCache().Remove(crSystemDeviceName)
+	d.cache.GetCache().GetCache().Remove(crDeviceName)
+	d.cache.GetCache().GetCache().Remove(crSystemDeviceName)
 
 	return nil
 }
@@ -461,7 +452,16 @@ func (ddd *deviceInfo) validateConfig() error {
 	fmt.Println(string(config))
 	fmt.Println("@@@@@@@@@@@@@@@@@@@@@")
 
-	rootStruct, err := ddd.model.NewConfigStruct(config)
+	/*
+		//jsonbyteValue, _ := ioutil.ReadAll(jsonFile)
+		d := &ygotsrl.Device{}
+		if err := ygotsrl.Unmarshal([]byte(config), d); err != nil {
+			panic(fmt.Sprintf("Cannot unmarshal JSON: %v", err))
+		}
+	*/
+	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
+
+	rootStruct, err := ddd.cache.GetModel(crDeviceName).NewConfigStruct(config)
 	if err != nil {
 		ddd.log.Debug("NewConfigStruct error", "error", err)
 		return err
@@ -475,26 +475,30 @@ func (ddd *deviceInfo) validateConfig() error {
 	return nil
 }
 
-func (ddd *deviceInfo) ygotcallback(newConfig ygot.ValidatedGoStruct) error { // Apply the config to your device and return nil if success. return error if fails.		/
+func (ddd *deviceInfo) ygotcallback(c ygot.ValidatedGoStruct) error { // Apply the config to your device and return nil if success. return error if fails.		/
 	// Do something ...
-	fmt.Println("ygot callback")
-	j, err := ygot.EmitJSON(newConfig, &ygot.EmitJSONConfig{
-		Format: ygot.Internal,
-		Indent: "  ",
-		RFC7951Config: &ygot.RFC7951JSONConfig{
-			AppendModuleName: true,
-		},
-	})
-	if err != nil {
-		return err
-	}
-	fmt.Println(j)
+	//fmt.Println("ygot callback")
+	/*
+		j, err := ygot.EmitJSON(newConfig, &ygot.EmitJSONConfig{
+			Format: ygot.Internal,
+			Indent: "  ",
+			RFC7951Config: &ygot.RFC7951JSONConfig{
+				AppendModuleName: true,
+			},
+		})
+		if err != nil {
+			return err
+		}
+	*/
+	//fmt.Println(j)
 
 	//var x interface{}
 	//json.Unmarshal([]byte(j), &x)
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 	ddd.log.Debug("crDeviceName", "crDeviceName", crDeviceName)
+
+	ddd.cache.UpdateValidatedGoStruct(crDeviceName, c)
 
 	// update the cache with the data
 	/*
@@ -518,7 +522,8 @@ func (ddd *deviceInfo) ygotcallback(newConfig ygot.ValidatedGoStruct) error { //
 		}
 	*/
 
-	ns, err := ygot.TogNMINotifications(newConfig, time.Now().UnixNano(), ygot.GNMINotificationsConfig{
+	// we dont validate the cache
+	ns, err := ygot.TogNMINotifications(ddd.cache.GetValidatedGoStruct(crDeviceName), time.Now().UnixNano(), ygot.GNMINotificationsConfig{
 		UsePathElem: true,
 	})
 	if err != nil {
@@ -526,11 +531,13 @@ func (ddd *deviceInfo) ygotcallback(newConfig ygot.ValidatedGoStruct) error { //
 	}
 
 	for _, n := range ns {
-		for _, u := range n.GetUpdate() {
-			ddd.log.Debug("Update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
-		}
+		/*
+			for _, u := range n.GetUpdate() {
+				ddd.log.Debug("Update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
+			}
+		*/
 
-		if err := ddd.cache.GnmiUpdate(crDeviceName, n); err != nil {
+		if err := ddd.cache.GetCache().GnmiUpdate(crDeviceName, n); err != nil {
 			//log.Debug("handle target update", "error", err, "Path", yparser.GnmiPath2XPath(u.GetPath(), true), "Value", u.GetVal())
 			//log.Debug("handle target update", "error", err, "Notification", *n)
 			return errors.New("cache update failed")

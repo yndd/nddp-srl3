@@ -26,8 +26,8 @@ import (
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-runtime/pkg/logging"
-	"github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yentry"
+	"github.com/yndd/nddp-srl3/internal/cache"
 	deviceschema "github.com/yndd/nddp-srl3/pkg/yangschema"
 	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
 	"google.golang.org/grpc"
@@ -51,7 +51,7 @@ type DeviceCollector interface {
 	Start() error
 	Stop() error
 	WithLogger(log logging.Logger)
-	WithCache(c *cache.Cache)
+	WithCache(c cache.Cache)
 	WithEventCh(eventChs map[string]chan event.GenericEvent)
 }
 
@@ -65,7 +65,7 @@ func WithLogger(log logging.Logger) Option {
 	}
 }
 
-func WithCache(c *cache.Cache) Option {
+func WithCache(c cache.Cache) Option {
 	return func(d DeviceCollector) {
 		d.WithCache(c)
 	}
@@ -81,7 +81,7 @@ func WithEventCh(eventChs map[string]chan event.GenericEvent) Option {
 type collector struct {
 	namespace           string
 	target              *target.Target
-	cache               *cache.Cache
+	cache               cache.Cache
 	subscriptions       []*Subscription
 	ctx                 context.Context
 	targetReceiveBuffer uint
@@ -138,7 +138,7 @@ func (c *collector) WithLogger(log logging.Logger) {
 	c.log = log
 }
 
-func (c *collector) WithCache(tc *cache.Cache) {
+func (c *collector) WithCache(tc cache.Cache) {
 	c.cache = tc
 }
 

@@ -74,7 +74,7 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Update, error) {
 
 	prefix := req.GetPrefix()
 	crDeviceName := req.GetPrefix().GetTarget()
-	if !s.cache.GetCache().HasTarget(crDeviceName) {
+	if !s.cache.GetCache().GetCache().HasTarget(crDeviceName) {
 		return nil, status.Errorf(codes.Unavailable, "cache not ready")
 	}
 
@@ -212,7 +212,7 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Update, error) {
 	}
 
 	for _, path := range req.GetPath() {
-		x, err := s.cache.GetJson(prefix.GetTarget(), prefix, path, schema)
+		x, err := s.cache.GetCache().GetJson(prefix.GetTarget(), prefix, path, schema)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -250,7 +250,7 @@ func appendUpdateResponse(data interface{}, path *gnmi.Path, updates []*gnmi.Upd
 }
 
 func (s *server) getResourceList(crSystemDeviceName string) ([]*systemv1alpha1.Gvk, error) {
-	rl, err := s.cache.GetJson(crSystemDeviceName,
+	rl, err := s.cache.GetCache().GetJson(crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{Elem: []*gnmi.PathElem{{Name: "gvk"}}},
 		s.nddpSchema)
@@ -262,7 +262,7 @@ func (s *server) getResourceList(crSystemDeviceName string) ([]*systemv1alpha1.G
 }
 
 func (s *server) getResource(crSystemDeviceName, gvkName string) (*systemv1alpha1.Gvk, error) {
-	rl, err := s.cache.GetJson(crSystemDeviceName,
+	rl, err := s.cache.GetCache().GetJson(crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{Elem: []*gnmi.PathElem{
 			{Name: "gvk", Key: map[string]string{"name": gvkName}},
@@ -316,7 +316,7 @@ func (s *server) getResourceName(crSystemDeviceName string, reqpath *gnmi.Path) 
 }
 
 func (s *server) getSpecdata(crSystemDeviceName string, resource *systemv1alpha1.Gvk) (interface{}, error) {
-	x1, err := s.cache.GetJson(
+	x1, err := s.cache.GetCache().GetJson(
 		crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{
@@ -379,7 +379,7 @@ func (s *server) getExhausted(crSystemDeviceName string) (int64, error) {
 		Elem: []*gnmi.PathElem{{Name: "exhausted"}},
 	}
 
-	n, err := s.cache.Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
+	n, err := s.cache.GetCache().Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
 	if err != nil {
 		return 0, err
 	}
@@ -405,7 +405,7 @@ func (s *server) getTransaction(crSystemDeviceName, transactionName string) (*sy
 		Elem: []*gnmi.PathElem{{Name: "transaction", Key: map[string]string{"name": transactionName}}},
 	}
 
-	n, err := s.cache.Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
+	n, err := s.cache.GetCache().Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func (s *server) deleteResource(crSystemDeviceName, resourceGvkName string) erro
 		},
 	}
 
-	if err := s.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := s.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "cache delete failed")
 	}
 	return nil

@@ -48,7 +48,7 @@ func (r *reconciler) initExhausted() error {
 		},
 	}
 
-	if err := r.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "init exhausted failed")
 	}
 	return nil
@@ -71,7 +71,7 @@ func (r *reconciler) setExhausted(v int64) error {
 		},
 	}
 
-	if err := r.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "set exhausted failed")
 	}
 	return nil
@@ -85,7 +85,7 @@ func (r *reconciler) getExhausted() (int64, error) {
 		Elem: []*gnmi.PathElem{{Name: "exhausted"}},
 	}
 
-	n, err := r.cache.Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
+	n, err := r.cache.GetCache().Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
 	if err != nil {
 		return 0, err
 	}
@@ -123,7 +123,7 @@ func (r *reconciler) setUpdateStatus(status bool) error {
 		},
 	}
 
-	if err := r.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "cache update failed")
 	}
 	return nil
@@ -137,7 +137,7 @@ func (r *reconciler) getUpdateStatus() (bool, error) {
 		Elem: []*gnmi.PathElem{{Name: "cache-update"}},
 	}
 
-	n, err := r.cache.Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
+	n, err := r.cache.GetCache().Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
 	if err != nil {
 		return false, err
 	}
@@ -162,7 +162,7 @@ func (r *reconciler) getResource(gvkResourceName string) (*systemv1alpha1.Gvk, e
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	rl, err := r.cache.GetJson(crSystemDeviceName,
+	rl, err := r.cache.GetCache().GetJson(crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{Elem: []*gnmi.PathElem{{Name: "gvk", Key: map[string]string{"name": gvkResourceName}}}},
 		r.nddpSchema)
@@ -177,7 +177,7 @@ func (r *reconciler) getResourceList() ([]*systemv1alpha1.Gvk, error) {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	rl, err := r.cache.GetJson(crSystemDeviceName,
+	rl, err := r.cache.GetCache().GetJson(crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{Elem: []*gnmi.PathElem{{Name: "gvk"}}},
 		r.nddpSchema)
@@ -192,7 +192,7 @@ func (r *reconciler) getResourceListRaw() (interface{}, error) {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	rl, err := r.cache.GetJson(crSystemDeviceName,
+	rl, err := r.cache.GetCache().GetJson(crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{Elem: []*gnmi.PathElem{{Name: "gvk"}}},
 		r.nddpSchema)
@@ -217,7 +217,7 @@ func (r *reconciler) deleteResource(resourceGvkName string) error {
 		},
 	}
 
-	if err := r.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "cache update failed")
 	}
 	return nil
@@ -252,7 +252,7 @@ func (r *reconciler) updateResourceStatus(resourceGvkName string, status systemv
 		},
 	}
 
-	if err := r.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "resource update failed in cache")
 	}
 	return nil
@@ -262,7 +262,7 @@ func (r *reconciler) getTransactionList() ([]*systemv1alpha1.Transaction, error)
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	rl, err := r.cache.GetJson(crSystemDeviceName,
+	rl, err := r.cache.GetCache().GetJson(crSystemDeviceName,
 		&gnmi.Path{Target: crSystemDeviceName},
 		&gnmi.Path{Elem: []*gnmi.PathElem{{Name: "transaction"}}},
 		r.nddpSchema)
@@ -293,7 +293,7 @@ func (r *reconciler) updateTransactionStatus(trName string, status systemv1alpha
 		},
 	}
 
-	if err := r.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "transaction update failed in cache")
 	}
 	return nil
@@ -313,7 +313,7 @@ func (r *reconciler) deleteTransaction(trName string) error {
 		},
 	}
 
-	if err := r.cache.GnmiUpdate(crSystemDeviceName, n); err != nil {
+	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
 		return errors.Wrap(err, "cache update failed")
 	}
 	return nil

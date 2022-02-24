@@ -26,8 +26,9 @@ import (
 	"github.com/pkg/errors"
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
-	"github.com/yndd/ndd-yang/pkg/cache"
+	//"github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yentry"
+	"github.com/yndd/nddp-srl3/internal/cache"
 	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
@@ -56,7 +57,7 @@ func WithDeviceSchema(y *yentry.Entry) Option {
 	}
 }
 
-func WithCache(c *cache.Cache) Option {
+func WithCache(c cache.Cache) Option {
 	return func(s Server) {
 		s.WithCache(c)
 	}
@@ -71,7 +72,7 @@ func WithEventChannels(e map[string]chan event.GenericEvent) Option {
 type Server interface {
 	WithLogger(log logging.Logger)
 	WithDeviceSchema(y *yentry.Entry)
-	WithCache(c *cache.Cache)
+	WithCache(c cache.Cache)
 	WithEventChannels(e map[string]chan event.GenericEvent)
 	Start() error
 }
@@ -105,7 +106,7 @@ type server struct {
 	deviceSchema *yentry.Entry
 	nddpSchema   *yentry.Entry
 	// schema
-	cache *cache.Cache
+	cache cache.Cache
 	//stateCache  *cache.Cache
 	m *match.Match // only used for statecache for now -> TBD if we need to make this more
 	// gnmi calls
@@ -152,7 +153,7 @@ func (s *server) WithDeviceSchema(y *yentry.Entry) {
 	s.deviceSchema = y
 }
 
-func (s *server) WithCache(c *cache.Cache) {
+func (s *server) WithCache(c cache.Cache) {
 	s.cache = c
 }
 

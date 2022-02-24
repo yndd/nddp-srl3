@@ -24,9 +24,10 @@ import (
 	"github.com/karimra/gnmic/types"
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-runtime/pkg/logging"
-	"github.com/yndd/ndd-yang/pkg/cache"
+	//"github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yentry"
 
+	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/device"
 	deviceschema "github.com/yndd/nddp-srl3/pkg/yangschema"
 	systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
@@ -47,7 +48,7 @@ type DeviceReconciler interface {
 	Start() error
 	Stop() error
 	WithLogger(log logging.Logger)
-	WithCache(c *cache.Cache)
+	WithCache(c cache.Cache)
 	WithDevice(d device.Device)
 }
 
@@ -61,7 +62,7 @@ func WithLogger(log logging.Logger) Option {
 	}
 }
 
-func WithCache(c *cache.Cache) Option {
+func WithCache(c cache.Cache) Option {
 	return func(d DeviceReconciler) {
 		d.WithCache(c)
 	}
@@ -78,7 +79,7 @@ type reconciler struct {
 	namespace string
 	target    *target.Target
 	device    device.Device
-	cache     *cache.Cache
+	cache     cache.Cache
 	ctx       context.Context
 
 	nddpSchema   *yentry.Entry
@@ -119,7 +120,7 @@ func (r *reconciler) WithLogger(log logging.Logger) {
 	r.log = log
 }
 
-func (r *reconciler) WithCache(tc *cache.Cache) {
+func (r *reconciler) WithCache(tc cache.Cache) {
 	r.cache = tc
 }
 
