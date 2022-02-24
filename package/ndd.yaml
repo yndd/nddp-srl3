@@ -1,0 +1,8 @@
+
+apiVersion: meta.pkg.ndd.yndd.io/v1
+kind: Provider
+metadata:
+  name: nddp-srl3
+spec:
+  controller:
+    image: yndd/nddp-srl3-controller:latest
