@@ -19,7 +19,7 @@ package srl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"reflect"
 
 	//"strings"
 	"time"
@@ -41,8 +41,6 @@ import (
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/ndd-yang/pkg/yresource"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -54,7 +52,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
+	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-srl3/internal/shared"
+	"github.com/yndd/nddp-srl3/pkg/ygotnddp"
+	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
 )
 
 const (
@@ -75,9 +76,19 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 
 	events := make(chan cevent.GenericEvent)
 
-	y := initYangDevice(
-		nddcopts.DeviceSchema,
-	)
+	dm := &model.Model{
+		StructRootType:  reflect.TypeOf((*ygotsrl.Device)(nil)),
+		SchemaTreeRoot:  ygotsrl.SchemaTree["Device"],
+		JsonUnmarshaler: ygotsrl.Unmarshal,
+		EnumData:        ygotsrl.ΛEnum,
+	}
+
+	sm := &model.Model{
+		StructRootType:  reflect.TypeOf((*ygotnddp.Device)(nil)),
+		SchemaTreeRoot:  ygotsrl.SchemaTree["Device"],
+		JsonUnmarshaler: ygotsrl.Unmarshal,
+		EnumData:        ygotsrl.ΛEnum,
+	}
 
 	r := managed.NewReconciler(mgr,
 		resource.ManagedKind(srlv1alpha1.DeviceGroupVersionKind),
@@ -88,14 +99,15 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 			usage:        resource.NewNetworkNodeUsageTracker(mgr.GetClient(), &ndrv1.NetworkNodeUsage{}),
 			deviceSchema: nddcopts.DeviceSchema,
 			nddpSchema:   nddcopts.NddpSchema,
-			y:            y,
+			deviceModel:  dm,
+			systemModel:  sm,
 			newClientFn:  target.NewTarget,
 			gnmiAddress:  nddcopts.GnmiAddress},
 		),
 		managed.WithValidator(&validatorDevice{
 			log:          nddcopts.Logger,
 			deviceSchema: nddcopts.DeviceSchema,
-			y:            y},
+		},
 		),
 		managed.WithLogger(nddcopts.Logger.WithValues("Srl3Device", name)),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))))
@@ -124,68 +136,9 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 		Complete(r)
 }
 
-type Device struct {
-	*yresource.Resource
-}
-
-func initYangDevice(deviceSchema *yentry.Entry, opts ...yresource.Option) yresource.Handler {
-	return &Device{&yresource.Resource{
-		DeviceSchema: deviceSchema,
-	}}
-
-}
-
-// GetRootPath returns the rootpath of the resource
-func (r *Device) GetRootPath(mg resource.Managed) []*gnmi.Path {
-
-	cr, ok := mg.(*srlv1alpha1.Srl3Device)
-	if !ok {
-		fmt.Printf("wrong cr: %v\n", cr)
-		return []*gnmi.Path{}
-	}
-
-	return []*gnmi.Path{
-		{
-			Elem: []*gnmi.PathElem{
-				{Name: "Device"},
-			},
-		},
-	}
-}
-
-// GetParentDependency returns the parent dependency of the resource
-func (r *Device) GetParentDependency(mg resource.Managed) []*leafref.LeafRef {
-	rootPath := r.GetRootPath(mg)
-	// if the path is not bigger than 1 element there is no parent dependency
-	if len(rootPath[0].GetElem()) < 2 {
-		return []*leafref.LeafRef{}
-	}
-	dependencyPath := r.DeviceSchema.GetParentDependency(rootPath[0], rootPath[0], "")
-	// the dependency path is the rootPath except for the last element
-	//dependencyPathElem := rootPath[0].GetElem()[:(len(rootPath[0].GetElem()) - 1)]
-	// check for keys present, if no keys present we return an empty list
-	keysPresent := false
-	for _, pathElem := range dependencyPath.GetElem() {
-		if len(pathElem.GetKey()) != 0 {
-			keysPresent = true
-		}
-	}
-	if !keysPresent {
-		return []*leafref.LeafRef{}
-	}
-
-	// return the rootPath except the last entry
-	return []*leafref.LeafRef{
-		{
-			RemotePath: dependencyPath,
-		},
-	}
-}
-
 type validatorDevice struct {
 	log          logging.Logger
 	deviceSchema *yentry.Entry
-	y            yresource.Handler
 }
 
 func (v *validatorDevice) ValidateLeafRef(ctx context.Context, mg resource.Managed, cfg []byte) (managed.ValidateLeafRefObservation, error) {
@@ -214,6 +167,8 @@ type connectorDevice struct {
 	usage        resource.Tracker
 	deviceSchema *yentry.Entry
 	nddpSchema   *yentry.Entry
+	deviceModel  *model.Model
+	systemModel  *model.Model
 	y            yresource.Handler
 	newClientFn  func(c *gnmitypes.TargetConfig) *target.Target
 	gnmiAddress  string
@@ -246,7 +201,7 @@ func (c *connectorDevice) Connect(ctx context.Context, mg resource.Managed) (man
 	}
 
 	cfg := &gnmitypes.TargetConfig{
-		Name:       "dummy",
+		Name:       cr.GetNetworkNodeReference().Name,
 		Address:    c.gnmiAddress,
 		Username:   utils.StringPtr("admin"),
 		Password:   utils.StringPtr("admin"),
@@ -266,7 +221,7 @@ func (c *connectorDevice) Connect(ctx context.Context, mg resource.Managed) (man
 
 	tns := []string{nn.GetName()}
 
-	return &externalDevice{client: cl, targets: tns, log: log, deviceSchema: c.deviceSchema, nddpSchema: c.nddpSchema, y: c.y}, nil
+	return &externalDevice{client: cl, targets: tns, log: log, deviceSchema: c.deviceSchema, nddpSchema: c.nddpSchema, deviceModel: c.deviceModel, systemModel: c.systemModel}, nil
 }
 
 // An ExternalClient observes, then either creates, updates, or deletes an
@@ -277,7 +232,8 @@ type externalDevice struct {
 	log          logging.Logger
 	deviceSchema *yentry.Entry
 	nddpSchema   *yentry.Entry
-	y            yresource.Handler
+	deviceModel  *model.Model
+	systemModel  *model.Model
 }
 
 func (e *externalDevice) Close() {
@@ -286,161 +242,179 @@ func (e *externalDevice) Close() {
 
 func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
 	log := e.log.WithValues("Resource", mg.GetName())
-	//log.Debug("Observing ...")
+	log.Debug("Observing ...")
 
 	cr, ok := mg.(*srlv1alpha1.Srl3Device)
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errUnexpectedDevice)
 	}
 
-	// rootpath of the resource
-	rootPath := e.y.GetRootPath(cr)
-	hierElements := e.deviceSchema.GetHierarchicalResourcesLocal(true, rootPath[0], &gnmi.Path{}, make([]*gnmi.Path, 0))
-	//log.Debug("Observing hierElements ...", "Path", yparser.GnmiPath2XPath(rootPath[0], false), "hierElements", hierElements)
-
-	gvkTransaction, err := gvkresource.GetGvkTransaction(mg)
+	paths, err := e.getRootPaths(cr.Spec.Device)
 	if err != nil {
 		return managed.ExternalObservation{}, err
 	}
 
-	// gnmi get request
-	req := &gnmi.GetRequest{
-		//Prefix:   &gnmi.Path{Target: GnmiTarget, Origin: GnmiOrigin},
-		Prefix:   &gnmi.Path{Target: shared.GetCrDeviceName(mg.GetNamespace(), cr.GetNetworkNodeReference().Name)},
-		Path:     rootPath,
-		Encoding: gnmi.Encoding_JSON,
-		//Type:     gnmi.GetRequest_DataType(gnmi.GetRequest_STATE),
-		Extension: []*gnmi_ext.Extension{
-			{Ext: &gnmi_ext.Extension_RegisteredExt{
-				RegisteredExt: &gnmi_ext.RegisteredExtension{Id: gnmi_ext.ExtensionID_EID_EXPERIMENTAL, Msg: []byte(gvkTransaction)}}},
-		},
+	for _, path := range paths {
+		log.Debug("path", "path", yparser.GnmiPath2XPath(path, true))
 	}
 
-	// gnmi get response
-	exists := true
-	resp, err := e.client.Get(ctx, req)
-	if err != nil {
-		if er, ok := status.FromError(err); ok {
-			switch er.Code() {
-			case codes.ResourceExhausted:
-				// we use this to signal the device or cache is exhausted
-				return managed.ExternalObservation{
-					Ready:      false,
-					Exhausted:  true,
-					Exists:     false,
-					Pending:    true,
-					Failed:     true,
-					HasData:    false,
-					IsUpToDate: false,
-				}, nil
-			case codes.Unavailable:
-				// we use this to signal not ready
-				return managed.ExternalObservation{
-					Ready:      false,
-					Exists:     false,
-					Pending:    true,
-					Failed:     true,
-					HasData:    false,
-					IsUpToDate: false,
-				}, nil
-			case codes.NotFound:
-				// the k8s resource does not exists but the data can still exist
-				// if data exists it means we go from UMR -> MR
-				exists = false
-			case codes.AlreadyExists:
-				// the system cache has the resource but the action did not complete so we should skip the next reconcilation
-				// loop and wait
-				return managed.ExternalObservation{
-					Ready:      true,
-					Exhausted:  false,
-					Exists:     true,
-					Pending:    true,
-					Failed:     false,
-					HasData:    false,
-					IsUpToDate: false,
-				}, nil
-			case codes.FailedPrecondition:
-				// the k8s resource exists but is in failed status, compare the response spec with current spec
-				// if the specs are equal return observation.ResponseSuccess -> False
-				// if the specs are not equal follow the regular procedure
-				//log.Debug("observing when using gnmic: resource failed")
-				failedObserve, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
-				if err != nil {
-					return managed.ExternalObservation{}, err
-				}
-				if failedObserve.upToDate {
-					// there is no difference between the previous spec and the current spec, so we dont retry
-					// given the previous attempt failed
+	/*
+		gvkTransaction, err := gvkresource.GetGvkTransaction(mg)
+		if err != nil {
+			return managed.ExternalObservation{}, err
+		}
+
+		// gnmi get request
+		req := &gnmi.GetRequest{
+			//Prefix:   &gnmi.Path{Target: GnmiTarget, Origin: GnmiOrigin},
+			Prefix:   &gnmi.Path{Target: shared.GetCrDeviceName(mg.GetNamespace(), cr.GetNetworkNodeReference().Name)},
+			Path:     paths,
+			Encoding: gnmi.Encoding_JSON,
+			//Type:     gnmi.GetRequest_DataType(gnmi.GetRequest_STATE),
+			Extension: []*gnmi_ext.Extension{
+				{Ext: &gnmi_ext.Extension_RegisteredExt{
+					RegisteredExt: &gnmi_ext.RegisteredExtension{Id: gnmi_ext.ExtensionID_EID_EXPERIMENTAL, Msg: []byte(gvkTransaction)}}},
+			},
+		}
+
+		// gnmi get response
+		exists := true
+		resp, err := e.client.Get(ctx, req)
+	*/
+	/*
+		if err != nil {
+			if er, ok := status.FromError(err); ok {
+				switch er.Code() {
+				case codes.ResourceExhausted:
+					// we use this to signal the device or cache is exhausted
 					return managed.ExternalObservation{
-						Ready:      true,
-						Exists:     true,
-						Pending:    false,
+						Ready:      false,
+						Exhausted:  true,
+						Exists:     false,
+						Pending:    true,
 						Failed:     true,
 						HasData:    false,
 						IsUpToDate: false,
 					}, nil
-				} else {
-					// this should trigger an update
+				case codes.Unavailable:
+					// we use this to signal not ready
 					return managed.ExternalObservation{
-						Ready:      true,
-						Exists:     true,
-						Pending:    false,
-						Failed:     false,
-						HasData:    true,
+						Ready:      false,
+						Exists:     false,
+						Pending:    true,
+						Failed:     true,
+						HasData:    false,
 						IsUpToDate: false,
 					}, nil
+				case codes.NotFound:
+					// the k8s resource does not exists but the data can still exist
+					// if data exists it means we go from UMR -> MR
+					exists = false
+				case codes.AlreadyExists:
+					// the system cache has the resource but the action did not complete so we should skip the next reconcilation
+					// loop and wait
+					return managed.ExternalObservation{
+						Ready:      true,
+						Exhausted:  false,
+						Exists:     true,
+						Pending:    true,
+						Failed:     false,
+						HasData:    false,
+						IsUpToDate: false,
+					}, nil
+				case codes.FailedPrecondition:
+					// the k8s resource exists but is in failed status, compare the response spec with current spec
+					// if the specs are equal return observation.ResponseSuccess -> False
+					// if the specs are not equal follow the regular procedure
+					//log.Debug("observing when using gnmic: resource failed")
+					failedObserve, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
+					if err != nil {
+						return managed.ExternalObservation{}, err
+					}
+					if failedObserve.upToDate {
+						// there is no difference between the previous spec and the current spec, so we dont retry
+						// given the previous attempt failed
+						return managed.ExternalObservation{
+							Ready:      true,
+							Exists:     true,
+							Pending:    false,
+							Failed:     true,
+							HasData:    false,
+							IsUpToDate: false,
+						}, nil
+					} else {
+						// this should trigger an update
+						return managed.ExternalObservation{
+							Ready:      true,
+							Exists:     true,
+							Pending:    false,
+							Failed:     false,
+							HasData:    true,
+							IsUpToDate: false,
+						}, nil
+					}
 				}
 			}
 		}
-	}
+	*/
 
-	// processObserve
-	// o. marshal/unmarshal data
-	// 1. check if resource exists
-	// 2. remove parent hierarchical elements from spec
-	// 3. remove resource hierarchical elements from gnmi response
-	// 4. remove state
-	// 5. transform the data in gnmi to process the delta
-	// 6. find the resource delta: updates and/or deletes in gnmi
-	//exists, deletes, updates, b, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
-	//e.log.Debug("processObserve", "notification", resp.GetNotification())
-	observe, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
-	if err != nil {
-		return managed.ExternalObservation{}, err
-	}
-	if !observe.hasData {
-		// No Data exists -> Create it or Delete is complete
-		//log.Debug("Observing Response:", "observe", observe, "exists", exists, "Response", resp)
-		return managed.ExternalObservation{
-			Ready:      true,
-			Exists:     exists,
-			Pending:    false,
-			Failed:     false,
-			HasData:    false,
-			IsUpToDate: false,
-		}, nil
-	}
-	// Data exists
+	/*
+		// processObserve
+		// o. marshal/unmarshal data
+		// 1. check if resource exists
+		// 2. remove parent hierarchical elements from spec
+		// 3. remove resource hierarchical elements from gnmi response
+		// 4. remove state
+		// 5. transform the data in gnmi to process the delta
+		// 6. find the resource delta: updates and/or deletes in gnmi
+		//exists, deletes, updates, b, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
+		//e.log.Debug("processObserve", "notification", resp.GetNotification())
+		observe, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
+		if err != nil {
+			return managed.ExternalObservation{}, err
+		}
+		if !observe.hasData {
+			// No Data exists -> Create it or Delete is complete
+			//log.Debug("Observing Response:", "observe", observe, "exists", exists, "Response", resp)
+			return managed.ExternalObservation{
+				Ready:      true,
+				Exists:     exists,
+				Pending:    false,
+				Failed:     false,
+				HasData:    false,
+				IsUpToDate: false,
+			}, nil
+		}
+		// Data exists
 
-	if !observe.upToDate {
-		// resource is NOT up to date
-		log.Debug("Observing Response: resource NOT up to date", "Observe", observe, "exists", exists, "Response", resp)
+		if !observe.upToDate {
+			// resource is NOT up to date
+			log.Debug("Observing Response: resource NOT up to date", "Observe", observe, "exists", exists, "Response", resp)
+			return managed.ExternalObservation{
+				Ready:      true,
+				Exists:     exists,
+				Pending:    false,
+				Failed:     false,
+				HasData:    true,
+				IsUpToDate: false,
+				//ResourceDeletes:  observe.deletes,
+				//ResourceUpdates:  observe.updates,
+			}, nil
+		}
+		// resource is up to date
+		//log.Debug("Observing Response: resource up to date", "Observe", observe, "Response", resp)
 		return managed.ExternalObservation{
 			Ready:      true,
 			Exists:     exists,
 			Pending:    false,
 			Failed:     false,
 			HasData:    true,
-			IsUpToDate: false,
-			//ResourceDeletes:  observe.deletes,
-			//ResourceUpdates:  observe.updates,
+			IsUpToDate: true,
 		}, nil
-	}
-	// resource is up to date
-	//log.Debug("Observing Response: resource up to date", "Observe", observe, "Response", resp)
+	*/
 	return managed.ExternalObservation{
 		Ready:      true,
-		Exists:     exists,
+		Exists:     true,
 		Pending:    false,
 		Failed:     false,
 		HasData:    true,
@@ -452,22 +426,26 @@ func (e *externalDevice) Create(ctx context.Context, mg resource.Managed, ignore
 	//log := e.log.WithValues("Resource", mg.GetName())
 	//log.Debug("Creating ...")
 
-	cr, ok := mg.(*srlv1alpha1.Srl3Device)
-	if !ok {
-		return errors.New(errUnexpectedDevice)
-	}
+	/*
+		cr, ok := mg.(*srlv1alpha1.Srl3Device)
+		if !ok {
+			return errors.New(errUnexpectedDevice)
+		}
+	*/
 
 	// get the rootpath of the resource
-	rootPath := e.y.GetRootPath(mg)
+	//rootPath := e.y.GetRootPath(mg)
 
 	// create k8s object
 	// processCreate
 	// 0. marshal/unmarshal data
 	// 1. transform the spec data to gnmi updates
-	updates, err := processCreateK8s(mg, rootPath[0], &cr.Spec, e.deviceSchema, e.nddpSchema, ignoreTransaction)
-	if err != nil {
-		return errors.Wrap(err, errCreateObject)
-	}
+	/*
+		updates, err := processCreateK8s(mg, rootPath[0], &cr.Spec, e.deviceSchema, e.nddpSchema, ignoreTransaction)
+		if err != nil {
+			return errors.Wrap(err, errCreateObject)
+		}
+	*/
 	/*
 		for _, update := range updates {
 			log.Debug("Create Fine Grane Updates", "Path", yparser.GnmiPath2XPath(update.Path, true), "Value", update.GetVal())
@@ -479,17 +457,19 @@ func (e *externalDevice) Create(ctx context.Context, mg resource.Managed, ignore
 		}
 	*/
 
-	crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
+	/*
+		crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
 
-	req := &gnmi.SetRequest{
-		Prefix:  &gnmi.Path{Target: crSystemDeviceName},
-		Replace: updates,
-	}
+		req := &gnmi.SetRequest{
+			Prefix:  &gnmi.Path{Target: crSystemDeviceName},
+			Replace: updates,
+		}
 
-	_, err = e.client.Set(ctx, req)
-	if err != nil {
-		return errors.Wrap(err, errCreateDevice)
-	}
+		_, err = e.client.Set(ctx, req)
+		if err != nil {
+			return errors.Wrap(err, errCreateDevice)
+		}
+	*/
 
 	return nil
 }
@@ -498,36 +478,39 @@ func (e *externalDevice) Update(ctx context.Context, mg resource.Managed, obs ma
 	//log := e.log.WithValues("Resource", mg.GetName())
 	//log.Debug("Updating ...")
 
-	cr, ok := mg.(*srlv1alpha1.Srl3Device)
-	if !ok {
-		return errors.New(errUnexpectedDevice)
-	}
+	/*
+		cr, ok := mg.(*srlv1alpha1.Srl3Device)
+		if !ok {
+			return errors.New(errUnexpectedDevice)
+		}
 
-	// get the rootpath of the resource
-	rootPath := e.y.GetRootPath(mg)
+		// get the rootpath of the resource
+		//rootPath := e.y.GetRootPath(mg)
 
-	updates, err := processUpdateK8s(mg, rootPath[0], &cr.Spec, e.deviceSchema, e.nddpSchema)
-	if err != nil {
-		return errors.Wrap(err, errUpdateDevice)
-	}
+		updates, err := processUpdateK8s(mg, rootPath[0], &cr.Spec, e.deviceSchema, e.nddpSchema)
+		if err != nil {
+			return errors.Wrap(err, errUpdateDevice)
+		}
+	*/
 	/*
 		for _, update := range updates {
 			log.Debug("Update Fine Grane Updates", "Path", yparser.GnmiPath2XPath(update.Path, true), "Value", update.GetVal())
 		}
 	*/
 
-	crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
+	/*
+		crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
 
-	req := gnmi.SetRequest{
-		Prefix:  &gnmi.Path{Target: crSystemDeviceName},
-		Replace: updates,
-	}
+		req := gnmi.SetRequest{
+			Prefix:  &gnmi.Path{Target: crSystemDeviceName},
+			Replace: updates,
+		}
 
-	_, err = e.client.Set(ctx, &req)
-	if err != nil {
-		return errors.Wrap(err, errUpdateDevice)
-	}
-
+		_, err = e.client.Set(ctx, &req)
+		if err != nil {
+			return errors.Wrap(err, errUpdateDevice)
+		}
+	*/
 	return nil
 }
 
@@ -536,29 +519,32 @@ func (e *externalDevice) Delete(ctx context.Context, mg resource.Managed) error 
 	//log.Debug("Deleting ...")
 
 	// get the rootpath of the resource
-	rootPath := e.y.GetRootPath(mg)
+	/*
+		rootPath := e.y.GetRootPath(mg)
 
-	updates, err := processDeleteK8sResource(mg, rootPath[0], e.nddpSchema)
-	if err != nil {
-		return errors.Wrap(err, errDeleteDevice)
-	}
+		updates, err := processDeleteK8sResource(mg, rootPath[0], e.nddpSchema)
+		if err != nil {
+			return errors.Wrap(err, errDeleteDevice)
+		}
+	*/
 	/*
 		for _, update := range updates {
 			log.Debug("Delete Fine Grane Updates", "Path", yparser.GnmiPath2XPath(update.Path, true), "Value", update.GetVal())
 		}
 	*/
+	/*
+		crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
 
-	crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
+		req := gnmi.SetRequest{
+			Prefix:  &gnmi.Path{Target: crSystemDeviceName},
+			Replace: updates,
+		}
 
-	req := gnmi.SetRequest{
-		Prefix:  &gnmi.Path{Target: crSystemDeviceName},
-		Replace: updates,
-	}
-
-	_, err = e.client.Set(ctx, &req)
-	if err != nil {
-		return errors.Wrap(err, errDeleteDevice)
-	}
+		_, err = e.client.Set(ctx, &req)
+		if err != nil {
+			return errors.Wrap(err, errDeleteDevice)
+		}
+	*/
 
 	return nil
 }

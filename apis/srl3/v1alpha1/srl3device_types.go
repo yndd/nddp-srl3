@@ -10377,7 +10377,7 @@ type DeviceTunnelinterfaceVxlaninterfaceIngress struct {
 // A DeviceSpec defines the desired state of a Device.
 type DeviceSpec struct {
 	nddv1.ResourceSpec `json:",inline"`
-	Device             *Device `json:",omitempty"`
+	Device             *Device `json:"device,omitempty"`
 }
 
 // A DeviceStatus represents the observed state of a Device.

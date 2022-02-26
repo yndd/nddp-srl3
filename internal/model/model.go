@@ -33,7 +33,7 @@ func (m *Model) NewRootValue() interface{} {
 }
 
 // NewConfigStruct creates a ValidatedGoStruct of this model from jsonConfig. If jsonConfig is nil, creates an empty GoStruct.
-func (m *Model) NewConfigStruct(jsonConfig []byte) (ygot.ValidatedGoStruct, error) {
+func (m *Model) NewConfigStruct(jsonConfig []byte, validate bool) (ygot.ValidatedGoStruct, error) {
 	rootStruct, ok := m.NewRootValue().(ygot.ValidatedGoStruct)
 	if !ok {
 		return nil, errors.New("root node is not a ygot.ValidatedGoStruct")
@@ -42,8 +42,10 @@ func (m *Model) NewConfigStruct(jsonConfig []byte) (ygot.ValidatedGoStruct, erro
 		if err := m.JsonUnmarshaler(jsonConfig, rootStruct); err != nil {
 			return nil, err
 		}
-		if err := rootStruct.Validate(); err != nil {
-			return nil, err
+		if validate {
+			if err := rootStruct.Validate(); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return rootStruct, nil

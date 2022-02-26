@@ -28,34 +28,40 @@ import (
 // getChildNode gets a node's child with corresponding schema specified by path
 // element. If not found and createIfNotExist is set as true, an empty node is
 // created and returned.
-func getChildNode(node map[string]interface{}, schema *yang.Entry, elem *gnmi.PathElem, createIfNotExist bool) (interface{}, *yang.Entry) {
+func (c *collector) getChildNode(node map[string]interface{}, schema *yang.Entry, elem *gnmi.PathElem, createIfNotExist bool) (interface{}, *yang.Entry) {
 	var nextSchema *yang.Entry
 	var ok bool
 
-	if nextSchema, ok = schema.Dir[elem.Name]; !ok {
+	//fmt.Printf("elem name: %s, key: %v\n", elem.GetName(), elem.GetKey())
+	//c.log.Debug("getChildNode", "elem name", elem.GetName(), "elem key", elem.GetKey())
+
+	if nextSchema, ok = schema.Dir[elem.GetName()]; !ok {
 		return nil, nil
 	}
 
 	var nextNode interface{}
-	if elem.GetKey() == nil {
-		if nextNode, ok = node[elem.Name]; !ok {
+	if len(elem.GetKey()) == 0 {
+		//c.log.Debug("getChildNode container", "elem name", elem.GetName(), "elem key", elem.GetKey())
+		if nextNode, ok = node[elem.GetName()]; ok {
+			//c.log.Debug("getChildNode new container entry", "elem name", elem.GetName(), "elem key", elem.GetKey())
 			if createIfNotExist {
 				node[elem.Name] = make(map[string]interface{})
-				nextNode = node[elem.Name]
+				nextNode = node[elem.GetName()]
 			}
 		}
 		return nextNode, nextSchema
 	}
 
-	nextNode = getKeyedListEntry(node, elem, createIfNotExist)
+	nextNode = c.getKeyedListEntry(node, elem, createIfNotExist)
 	return nextNode, nextSchema
 }
 
 // getKeyedListEntry finds the keyed list entry in node by the name and key of
 // path elem. If entry is not found and createIfNotExist is true, an empty entry
 // will be created (the list will be created if necessary).
-func getKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem, createIfNotExist bool) map[string]interface{} {
-	curNode, ok := node[elem.Name]
+func (c *collector) getKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem, createIfNotExist bool) map[string]interface{} {
+	//c.log.Debug("getKeyedListEntry", "elem name", elem.GetName(), "elem key", elem.GetKey())
+	curNode, ok := node[elem.GetName()]
 	if !ok {
 		if !createIfNotExist {
 			return nil
@@ -63,20 +69,27 @@ func getKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem, createI
 
 		// Create a keyed list as node child and initialize an entry.
 		m := make(map[string]interface{})
-		for k, v := range elem.Key {
+		for k, v := range elem.GetKey() {
 			m[k] = v
 			if vAsNum, err := strconv.ParseFloat(v, 64); err == nil {
 				m[k] = vAsNum
 			}
 		}
-		node[elem.Name] = []interface{}{m}
+		node[elem.GetName()] = []interface{}{m}
 		return m
 	}
 
 	// Search entry in keyed list.
 	keyedList, ok := curNode.([]interface{})
 	if !ok {
-		return nil
+		switch m := curNode.(type) {
+		case map[string]interface{}:
+			return m
+		default:
+			return nil
+
+		}
+
 	}
 	for _, n := range keyedList {
 		m, ok := n.(map[string]interface{})
@@ -86,7 +99,7 @@ func getKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem, createI
 		}
 		keyMatching := true
 		// must be exactly match
-		for k, v := range elem.Key {
+		for k, v := range elem.GetKey() {
 			attrVal, ok := m[k]
 			if !ok {
 				return nil
@@ -106,12 +119,12 @@ func getKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem, createI
 
 	// Create an entry in keyed list.
 	m := make(map[string]interface{})
-	for k, v := range elem.Key {
+	for k, v := range elem.GetKey() {
 		m[k] = v
 		if vAsNum, err := strconv.ParseFloat(v, 64); err == nil {
 			m[k] = vAsNum
 		}
 	}
-	node[elem.Name] = append(keyedList, m)
+	node[elem.GetName()] = append(keyedList, m)
 	return m
 }

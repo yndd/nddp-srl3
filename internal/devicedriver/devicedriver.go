@@ -42,6 +42,7 @@ import (
 	"github.com/yndd/nddp-srl3/internal/gnmiserver"
 	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-srl3/internal/shared"
+	"github.com/yndd/nddp-srl3/pkg/ygotnddp"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -120,9 +121,10 @@ type deviceInfo struct {
 	collector  devicecollector.DeviceCollector
 	reconciler devicereconciler.DeviceReconciler
 	// dynamic discovered data
-	deviceDetails *ndrv1.DeviceDetails
-	initialConfig interface{}
-	callback      ConfigCallback
+	deviceDetails  *ndrv1.DeviceDetails
+	initialConfig  interface{}
+	deviceCallback Callback
+	systemCallback Callback
 	// chan
 	stopCh chan bool // used to stop the child go routines if the device gets deleted
 	// logging
@@ -329,9 +331,10 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	}
 	d.printDeviceCapabilities(cap)
 
-	/// initiaize model
-	d.cache.SetModel(crDeviceName, getModel(cap))
-	ddd.callback = ddd.ygotcallback
+	/// initialize model
+	d.cache.SetModel(crDeviceName, getDeviceModel(cap))
+	ddd.deviceCallback = ddd.ygotDeviceCallback
+	ddd.systemCallback = ddd.ygotSystemCallback
 
 	// get device details through gnmi
 	ddd.deviceDetails, err = ddd.device.Discover(d.ctx)
@@ -339,6 +342,9 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 		return err
 	}
 	d.log.Debug("deviceDetails", "info", ddd.deviceDetails)
+
+	// initialize the system device model
+	d.cache.SetModel(crSystemDeviceName, getSystemModel())
 
 	// initialize cache with target
 	if !d.cache.GetCache().GetCache().HasTarget(crDeviceName) {
@@ -364,7 +370,7 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 
 	//d.log.Debug("initial config", "config", ddd.initialConfig)
 
-	if err := ddd.validateConfig(); err != nil {
+	if err := ddd.validateDeviceConfig(); err != nil {
 		d.log.Debug("validateConfig", "error", err)
 		return errors.Wrap(err, "cannot validate config")
 	}
@@ -419,7 +425,24 @@ func (d *deviceDriver) deleteDevice(du shared.DeviceUpdate) error {
 	return nil
 }
 
-func getModel(cap []*gnmi.ModelData) *model.Model {
+func getSystemModel() *model.Model {
+	modelData := []*pb.ModelData{
+		{
+			Name:         "nddp-system.yang",
+			Organization: "ndd",
+			Version:      "2021-09-01",
+		},
+	}
+	return &model.Model{
+		ModelData:       modelData,
+		StructRootType:  reflect.TypeOf((*ygotnddp.Device)(nil)),
+		SchemaTreeRoot:  ygotsrl.SchemaTree["Device"],
+		JsonUnmarshaler: ygotsrl.Unmarshal,
+		EnumData:        ygotsrl.ΛEnum,
+	}
+}
+
+func getDeviceModel(cap []*gnmi.ModelData) *model.Model {
 	modelData := make([]*pb.ModelData, 0)
 	for _, c := range cap {
 		modelData = append(modelData, &pb.ModelData{
@@ -437,37 +460,27 @@ func getModel(cap []*gnmi.ModelData) *model.Model {
 	}
 }
 
-type ConfigCallback func(ygot.ValidatedGoStruct) error
+type Callback func(ygot.ValidatedGoStruct) error
 
-func (ddd *deviceInfo) validateConfig() error {
-	// WORKAROUND TO AVOID LEAFREF VALIDATION ISSUE In YGOT
-	//ddd.cutConfig()
+func (ddd *deviceInfo) validateDeviceConfig() error {
+	// TBD REKATIVE LEAFREF IS AN ISSUE In YGOT
 
 	config, err := json.MarshalIndent(ddd.initialConfig, "", "\t")
 	if err != nil {
 		return err
 	}
-	//ddd.log.Debug("String based intial config", "string", string(config))
-	fmt.Println("@@@@@@@@@@@@@@@@@@@@@")
-	fmt.Println(string(config))
-	fmt.Println("@@@@@@@@@@@@@@@@@@@@@")
 
-	/*
-		//jsonbyteValue, _ := ioutil.ReadAll(jsonFile)
-		d := &ygotsrl.Device{}
-		if err := ygotsrl.Unmarshal([]byte(config), d); err != nil {
-			panic(fmt.Sprintf("Cannot unmarshal JSON: %v", err))
-		}
-	*/
+	fmt.Println(string(config))
+
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 
-	rootStruct, err := ddd.cache.GetModel(crDeviceName).NewConfigStruct(config)
+	rootStruct, err := ddd.cache.GetModel(crDeviceName).NewConfigStruct(config, true)
 	if err != nil {
 		ddd.log.Debug("NewConfigStruct error", "error", err)
 		return err
 	}
-	if config != nil && ddd.callback != nil {
-		if err := ddd.callback(rootStruct); err != nil {
+	if config != nil && ddd.deviceCallback != nil {
+		if err := ddd.deviceCallback(rootStruct); err != nil {
 			ddd.log.Debug("callback error", "error", err)
 			return err
 		}
@@ -475,7 +488,7 @@ func (ddd *deviceInfo) validateConfig() error {
 	return nil
 }
 
-func (ddd *deviceInfo) ygotcallback(c ygot.ValidatedGoStruct) error { // Apply the config to your device and return nil if success. return error if fails.		/
+func (ddd *deviceInfo) ygotDeviceCallback(c ygot.ValidatedGoStruct) error { // Apply the config to your device and return nil if success. return error if fails.		/
 	// Do something ...
 	//fmt.Println("ygot callback")
 	/*
@@ -496,7 +509,7 @@ func (ddd *deviceInfo) ygotcallback(c ygot.ValidatedGoStruct) error { // Apply t
 	//json.Unmarshal([]byte(j), &x)
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
-	ddd.log.Debug("crDeviceName", "crDeviceName", crDeviceName)
+	//ddd.log.Debug("crDeviceName", "crDeviceName", crDeviceName)
 
 	ddd.cache.UpdateValidatedGoStruct(crDeviceName, c)
 
@@ -547,19 +560,55 @@ func (ddd *deviceInfo) ygotcallback(c ygot.ValidatedGoStruct) error { // Apply t
 	return nil
 }
 
-func (ddd *deviceInfo) cutConfig() {
-	switch x := ddd.initialConfig.(type) {
-	case map[string]interface{}:
-		if xx, ok := x["srl_nokia-system:system"]; ok {
-			switch xxx := xx.(type) {
-			case map[string]interface{}:
-				if xxxx, ok := xxx["srl_nokia-aaa:aaa"]; ok {
-					switch xxxxx := xxxx.(type) {
-					case map[string]interface{}:
-						delete(xxxxx, "authentication")
-					}
-				}
-			}
+func (ddd *deviceInfo) validateSystemConfig() error {
+	// TBD REKATIVE LEAFREF IS AN ISSUE In YGOT
+
+	config := []byte("{}")
+
+	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+
+	rootStruct, err := ddd.cache.GetModel(crSystemDeviceName).NewConfigStruct(config, true)
+	if err != nil {
+		ddd.log.Debug("NewConfigStruct error", "error", err)
+		return err
+	}
+	if config != nil && ddd.systemCallback != nil {
+		if err := ddd.systemCallback(rootStruct); err != nil {
+			ddd.log.Debug("callback error", "error", err)
+			return err
 		}
 	}
+	return nil
+}
+
+func (ddd *deviceInfo) ygotSystemCallback(c ygot.ValidatedGoStruct) error { // Apply the config to your device and return nil if success. return error if fails.		/
+
+	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+
+	ddd.cache.UpdateValidatedGoStruct(crSystemDeviceName, c)
+
+	// we dont validate the cache
+	ns, err := ygot.TogNMINotifications(ddd.cache.GetValidatedGoStruct(crDeviceName), time.Now().UnixNano(), ygot.GNMINotificationsConfig{
+		UsePathElem: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, n := range ns {
+		/*
+			for _, u := range n.GetUpdate() {
+				ddd.log.Debug("Update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
+			}
+		*/
+		if err := ddd.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
+			//log.Debug("handle target update", "error", err, "Path", yparser.GnmiPath2XPath(u.GetPath(), true), "Value", u.GetVal())
+			//log.Debug("handle target update", "error", err, "Notification", *n)
+			return errors.New("cache update failed")
+		}
+	}
+
+	return nil
 }
