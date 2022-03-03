@@ -94,8 +94,10 @@ func (c *cache) GetModel(crDeviceName string) *model.Model {
 func (c *cache) ValidateCreate(crDeviceName string, x interface{}) (ygot.ValidatedGoStruct, error) {
 	m := c.GetModel(crDeviceName)
 
-	curGoStruct := c.GetValidatedGoStruct(crDeviceName)
-	ygot.DeepCopy(curGoStruct)
+	curGoStruct, err := ygot.DeepCopy(c.GetValidatedGoStruct(crDeviceName))
+	if err != nil {
+		return nil, err
+	}
 
 	newConfig, err := json.Marshal(x)
 	if err != nil {
@@ -107,11 +109,11 @@ func (c *cache) ValidateCreate(crDeviceName string, x interface{}) (ygot.Validat
 		return nil, err
 	}
 
-	if err := ygot.MergeStructInto(curGoStruct, newGoStruct); err != nil {
+	if err := ygot.MergeStructInto(curGoStruct.(ygot.ValidatedGoStruct), newGoStruct); err != nil {
 		return nil, err
 	}
 
-	if err := curGoStruct.Validate(); err != nil {
+	if err := curGoStruct.(ygot.ValidatedGoStruct).Validate(); err != nil {
 		return nil, err
 	}
 
