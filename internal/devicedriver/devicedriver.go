@@ -463,7 +463,7 @@ func getDeviceModel(cap []*gnmi.ModelData) *model.Model {
 type Callback func(ygot.ValidatedGoStruct) error
 
 func (ddd *deviceInfo) validateDeviceConfig() error {
-	// TBD REKATIVE LEAFREF IS AN ISSUE In YGOT
+	// TBD RELATIVE LEAFREF IS AN ISSUE In YGOT
 
 	config, err := json.MarshalIndent(ddd.initialConfig, "", "\t")
 	if err != nil {
@@ -485,6 +485,8 @@ func (ddd *deviceInfo) validateDeviceConfig() error {
 			return err
 		}
 	}
+	//ddd.log.Debug("validateDeviceConfig", "deviceNme", crDeviceName, "gostruct", ddd.cache.GetValidatedGoStruct(crDeviceName))
+
 	return nil
 }
 
@@ -509,31 +511,9 @@ func (ddd *deviceInfo) ygotDeviceCallback(c ygot.ValidatedGoStruct) error { // A
 	//json.Unmarshal([]byte(j), &x)
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
-	//ddd.log.Debug("crDeviceName", "crDeviceName", crDeviceName)
+	ddd.log.Debug("ygotDeviceCallback updateValidatedGoStruct", "crDeviceName", crDeviceName)
 
 	ddd.cache.UpdateValidatedGoStruct(crDeviceName, c)
-
-	// update the cache with the data
-	/*
-		u, err := yparser.GetGranularUpdatesFromJSON(&gnmi.Path{}, x, ddd.deviceSchema)
-		if err != nil {
-			return err
-		}
-		n := &gnmi.Notification{
-			Timestamp: time.Now().UnixNano(),
-			Prefix:    &gnmi.Path{Target: crDeviceName},
-			Update:    u,
-		}
-		for _, upd := range u {
-			ddd.log.Debug("Update", "path", yparser.GnmiPath2XPath(upd.GetPath(), true), "val", upd.GetVal())
-		}
-		// update the cache with the latest config from the device
-		if err := ddd.cache.GnmiUpdate(crDeviceName, n); err != nil {
-			//log.Debug("handle target update", "error", err, "Path", yparser.GnmiPath2XPath(u.GetPath(), true), "Value", u.GetVal())
-			//log.Debug("handle target update", "error", err, "Notification", *n)
-			return errors.New("cache update failed")
-		}
-	*/
 
 	// we dont validate the cache
 	ns, err := ygot.TogNMINotifications(ddd.cache.GetValidatedGoStruct(crDeviceName), time.Now().UnixNano(), ygot.GNMINotificationsConfig{
@@ -561,7 +541,7 @@ func (ddd *deviceInfo) ygotDeviceCallback(c ygot.ValidatedGoStruct) error { // A
 }
 
 func (ddd *deviceInfo) validateSystemConfig() error {
-	// TBD REKATIVE LEAFREF IS AN ISSUE In YGOT
+	// TBD RELATIVE LEAFREF IS AN ISSUE In YGOT
 
 	config := []byte("{}")
 
@@ -579,6 +559,8 @@ func (ddd *deviceInfo) validateSystemConfig() error {
 			return err
 		}
 	}
+
+	//ddd.log.Debug("validateSystemConfig: deviceNme: %s, gostruct: %v\n", crSystemDeviceName, ddd.cache.GetValidatedGoStruct(crSystemDeviceName))
 	return nil
 }
 

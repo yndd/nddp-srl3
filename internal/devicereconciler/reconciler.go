@@ -24,6 +24,7 @@ import (
 	"github.com/karimra/gnmic/types"
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-runtime/pkg/logging"
+
 	//"github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yentry"
 
@@ -178,34 +179,30 @@ func (r *reconciler) run() error {
 			// -> device is not exhausted
 			// -> new updates from k8s operator are received
 			// else dont do anything since we need to wait for an update
-			// TODO check if cache is set
 			exhausted, err := r.getExhausted()
 			if err != nil {
 				log.Debug("error getting exhausted", "error", err)
 			} else {
 				if exhausted == 0 {
-					// handle transaction
-					tList, err := r.getTransactionList()
+					// get the list of MR
+					resourceList, err := r.getResourceList()
 					if err != nil {
-						log.Debug("error get transaction list", "error", err)
-					} else {
-						for _, t := range tList {
-							if t.Status == systemv1alpha1.E_TransactionStatus_Pending {
-								// process the transaction
-								if err := r.ReconcileTransaction(r.ctx, t); err != nil {
-									log.Debug("transaction reconciler error", "trnsaction", t.Name, "error", err)
-								}
-								// we only process 1 tranaction at the time
-								break
-							}
-						}
+						return err
 					}
-
-					// handle regular update
-					work, _ := r.getUpdateStatus()
-					if work {
-						if err := r.Reconcile(r.ctx); err != nil {
-							log.Debug("reconciler error", "error", err)
+					for _, resource := range resourceList {
+						switch resource.Status {
+						case systemv1alpha1.E_GvkStatus_Updatepending:
+							if err := r.reconcileUpdate(r.ctx, resource); err != nil {
+								log.Debug("reconciler error", "error", err)
+							}
+						case systemv1alpha1.E_GvkStatus_Deletepending:
+							if err := r.reconcileDelete(r.ctx, resource); err != nil {
+								log.Debug("reconciler error", "error", err)
+							}
+						case systemv1alpha1.E_GvkStatus_Createpending:
+							if err := r.reconcileCreate(r.ctx, resource); err != nil {
+								log.Debug("reconciler error", "error", err)
+							}
 						}
 					}
 				} else {

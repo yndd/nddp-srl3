@@ -229,7 +229,7 @@ func dataExists(pe []*gnmi.PathElem, x interface{}) bool {
 }
 
 // returns the update using group version kind namespace name
-func processUpdateK8sResource(mg resource.Managed, rootPath *gnmi.Path, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
+func processUpdateK8sResource(mg resource.Managed, rootPath []*gnmi.Path, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
 	gvkData := gvkresource.GetK8sResourceUpdate(mg, rootPath)
 	gvkPath := &gnmi.Path{
 		Elem: []*gnmi.PathElem{
@@ -245,14 +245,11 @@ func processUpdateK8sResource(mg resource.Managed, rootPath *gnmi.Path, nddpSche
 }
 
 // returns the delete using group version kind namespace name
-func processDeleteK8sResource(mg resource.Managed, rootPath *gnmi.Path, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
+func processDeleteK8sResource(mg resource.Managed, rootPath []*gnmi.Path, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
 	var gvkData *systemv1alpha1.Gvk
-	if gvkresource.GetTransaction(mg) != gvkresource.TransactionNone {
-		// transaction
-		gvkData = gvkresource.GetK8sResourceTransactionDelete(mg, rootPath)
-	} else {
-		gvkData = gvkresource.GetK8sResourceDelete(mg, rootPath)
-	}
+
+	gvkData = gvkresource.GetK8sResourceDelete(mg, rootPath)
+
 	gvkPath := &gnmi.Path{
 		Elem: []*gnmi.PathElem{
 			{Name: "gvk", Key: map[string]string{"name": gvkData.Name}},
@@ -267,14 +264,11 @@ func processDeleteK8sResource(mg resource.Managed, rootPath *gnmi.Path, nddpSche
 }
 
 // returns the create using group version kind namespace name
-func processCreateK8sResource(mg resource.Managed, rootPath *gnmi.Path, nddpSchema *yentry.Entry, ignoreTransaction bool) ([]*gnmi.Update, error) {
+func processCreateK8sResource(mg resource.Managed, rootPath []*gnmi.Path, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
 	var gvkData *systemv1alpha1.Gvk
-	if !ignoreTransaction && gvkresource.GetTransaction(mg) != gvkresource.TransactionNone {
-		// transaction
-		gvkData = gvkresource.GetK8sResourceTransactionCreate(mg, rootPath)
-	} else {
-		gvkData = gvkresource.GetK8sResourceCreate(mg, rootPath)
-	}
+
+	gvkData = gvkresource.GetK8sResourceCreate(mg, rootPath)
+
 	gvkPath := &gnmi.Path{
 		Elem: []*gnmi.PathElem{
 			{Name: "gvk", Key: map[string]string{"name": gvkData.Name}},
@@ -306,10 +300,10 @@ func processGvkData(gvkData interface{}) (interface{}, error) {
 // o. marshal/unmarshal data
 // 1. transform the spec data to gnmi updates
 // 2. merge gvk and spec data
-func processCreateK8s(mg resource.Managed, rootPath *gnmi.Path, specData interface{}, deviceSchema, nddpSchema *yentry.Entry, ignoreTransaction bool) ([]*gnmi.Update, error) {
+func processCreateK8s(mg resource.Managed, rootPath []*gnmi.Path, specData interface{}, deviceSchema, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
 
 	// prepare gvk resource data
-	gvkUpdates, err := processCreateK8sResource(mg, rootPath, nddpSchema, ignoreTransaction)
+	gvkUpdates, err := processCreateK8sResource(mg, rootPath, nddpSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +316,7 @@ func processCreateK8s(mg resource.Managed, rootPath *gnmi.Path, specData interfa
 	*/
 
 	// prepare the input data to compare against the response data
-	x1, err := processSpecData(rootPath, specData)
+	x1, err := processSpecData(rootPath[0], specData)
 	if err != nil {
 		return nil, err
 	}
@@ -332,9 +326,9 @@ func processCreateK8s(mg resource.Managed, rootPath *gnmi.Path, specData interfa
 	// the first element from the Spec
 	switch x := x1.(type) {
 	case map[string]interface{}:
-		x1 := x[rootPath.GetElem()[len(rootPath.GetElem())-1].GetName()]
+		x1 := x[rootPath[0].GetElem()[len(rootPath[0].GetElem())-1].GetName()]
 		//fmt.Printf("processCreate data %v, rootPath: %s\n", x1, yparser.GnmiPath2XPath(rootPath, true))
-		gnmiUpdate, err := yparser.GetUpdatesFromJSON(rootPath, x1, deviceSchema)
+		gnmiUpdate, err := yparser.GetUpdatesFromJSON(rootPath[0], x1, deviceSchema)
 		if err != nil {
 			return nil, err
 		}
@@ -360,7 +354,7 @@ func processCreateK8s(mg resource.Managed, rootPath *gnmi.Path, specData interfa
 // o. marshal/unmarshal data
 // 1. transform the spec data to gnmi updates
 // 2. merge gvk and spec data
-func processUpdateK8s(mg resource.Managed, rootPath *gnmi.Path, specData interface{}, deviceSchema, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
+func processUpdateK8s(mg resource.Managed, rootPath []*gnmi.Path, specData interface{}, deviceSchema, nddpSchema *yentry.Entry) ([]*gnmi.Update, error) {
 
 	// prepare gvk resource data
 	gvkUpdates, err := processUpdateK8sResource(mg, rootPath, nddpSchema)
@@ -369,7 +363,7 @@ func processUpdateK8s(mg resource.Managed, rootPath *gnmi.Path, specData interfa
 	}
 
 	// prepare the input data to compare against the response data
-	x1, err := processSpecData(rootPath, specData)
+	x1, err := processSpecData(rootPath[0], specData)
 	if err != nil {
 		return nil, err
 	}
@@ -379,9 +373,9 @@ func processUpdateK8s(mg resource.Managed, rootPath *gnmi.Path, specData interfa
 	// the first element from the Spec
 	switch x := x1.(type) {
 	case map[string]interface{}:
-		x1 := x[rootPath.GetElem()[len(rootPath.GetElem())-1].GetName()]
+		x1 := x[rootPath[0].GetElem()[len(rootPath[0].GetElem())-1].GetName()]
 		//fmt.Printf("processCreate data %v\n", x1)
-		gnmiUpdate, err := yparser.GetUpdatesFromJSON(rootPath, x1, deviceSchema)
+		gnmiUpdate, err := yparser.GetUpdatesFromJSON(rootPath[0], x1, deviceSchema)
 		if err != nil {
 			return nil, err
 		}

@@ -25,7 +25,7 @@ require (
 	github.com/yndd/ndd-core v0.1.7
 	github.com/yndd/ndd-yang v0.2.0
 	github.com/yndd/nddo-runtime v0.0.72
-	github.com/yndd/nddp-system v0.0.30
+	github.com/yndd/nddp-system v0.1.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.22.2
 	k8s.io/client-go v0.22.2

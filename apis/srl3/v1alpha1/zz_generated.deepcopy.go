@@ -6976,7 +6976,7 @@ func (in *DeviceInterfaceSubinterfaceVlanEncapSingletagged) DeepCopyInto(out *De
 	*out = *in
 	if in.Vlanid != nil {
 		in, out := &in.Vlanid, &out.Vlanid
-		*out = new(string)
+		*out = new(uint16)
 		**out = **in
 	}
 }

@@ -2679,7 +2679,7 @@ type DeviceInterfaceSubinterfaceVlanEncap struct {
 
 // DeviceInterfaceSubinterfaceVlanEncapSingletagged struct
 type DeviceInterfaceSubinterfaceVlanEncapSingletagged struct {
-	Vlanid *string `json:"vlan-id,omitempty"`
+	Vlanid *uint16 `json:"vlan-id,omitempty"`
 }
 
 // DeviceInterfaceSubinterfaceVlanEncapUntagged struct

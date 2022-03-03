@@ -4,13 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
-	"github.com/openconfig/gnmi/value"
-	"github.com/openconfig/ygot/ygot"
-	"github.com/openconfig/ygot/ytypes"
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
@@ -60,18 +56,12 @@ func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 		}
 		//log.Debug("resourceList", "list", resourceList)
 
-		jsonTree, err := ygot.ConstructIETFJSON(c.cache.GetValidatedGoStruct(crDeviceName), &ygot.RFC7951JSONConfig{})
-		if err != nil {
-			log.Debug("error in constructing IETF JSON tree from config struct", "error", err)
-			return errors.Wrap(err, "error in constructing IETF JSON tree from config struct")
-		}
-
 		// handle deletes
-		if err := c.handleDeletes(crDeviceName, resourceList, jsonTree, resp.GetUpdate().Delete); err != nil {
+		if err := c.handleDeletes(crDeviceName, resourceList, resp.GetUpdate().Delete); err != nil {
 			return err
 		}
 
-		if err := c.handleUpdates(crDeviceName, resourceList, jsonTree, resp.GetUpdate().Update); err != nil {
+		if err := c.handleUpdates(crDeviceName, resourceList, resp.GetUpdate().Update); err != nil {
 			return err
 		}
 
@@ -82,277 +72,109 @@ func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 	return nil
 }
 
-func (c *collector) handleDeletes(crDeviceName string, resourceList []*systemv1alpha1.Gvk, jsonTree map[string]interface{}, delPaths []*gnmi.Path) error {
-	m := c.cache.GetModel(crDeviceName)
-	schema := m.SchemaTreeRoot
-
-	for _, path := range delPaths {
-		xpath := yparser.GnmiPath2XPath(path, true)
-		resourceName, err := c.findManagedResource(xpath, resourceList)
+func (c *collector) handleDeletes(crDeviceName string, resourceList []*systemv1alpha1.Gvk, delPaths []*gnmi.Path) error {
+	if len(delPaths) > 0 {
+		/*
+			for _, p := range delPaths {
+				c.log.Debug("handleDeletes", "crDeviceName", crDeviceName, "path", yparser.GnmiPath2XPath(p, true))
+			}
+		*/
+		// validate deletes
+		goStruct, err := c.cache.ValidateDelete(crDeviceName, delPaths)
 		if err != nil {
 			return err
 		}
+		// update the config with the new struct
+		c.log.Debug("UpdateValidatedGoStruct", "goStruct", goStruct, "delPaths", delPaths)
+		c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
 
-		var curNode interface{} = jsonTree
-		pathDeleted := false
-		fullPath := cleanPath(path)
-
-		c.log.Debug("subscription config delete", "path", yparser.GnmiPath2XPath(fullPath, true))
-		for i, elem := range fullPath.GetElem() { // Delete sub-tree or leaf node.
-			node, ok := curNode.(map[string]interface{})
-			if !ok {
-				// we can break since the element does not exist in the schema
-				break
-			}
-
-			// Delete node
-			if i == len(fullPath.GetElem())-1 {
-				//c.log.Debug("getChildNode last elem", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "node", node)
-				if len(elem.GetKey()) == 0 {
-					//c.log.Debug("schema", "yangEntry", *schema)
-					// check schema for defaults
-					if schema, ok = schema.Dir[elem.GetName()]; ok {
-						if len(schema.Default) > 0 {
-							//c.log.Debug("schema", "yangEntry", *schema, "default", schema.Default)
-
-							if grpcStatusError := setPathWithoutAttribute(gnmi.UpdateResult_UPDATE, node, elem, schema.Default[0]); grpcStatusError != nil {
-								c.log.Debug("setPathWithoutAttribute", "path", yparser.GnmiPath2XPath(fullPath, true), "error", grpcStatusError)
-								return grpcStatusError
-							}
-							// should be update, but we abuse pathDeleted
-							pathDeleted = true
-							break
-						}
-					}
-					delete(node, elem.GetName())
-					pathDeleted = true
-					break
-				}
-				pathDeleted = deleteKeyedListEntry(node, elem)
-				break
-			}
-
-			//c.log.Debug("getChildNode before", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "node", node)
-			if curNode, schema = c.getChildNode(node, schema, elem, false); curNode == nil {
-				break
-			}
-			//c.log.Debug("getChildNode after", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "newNode", curNode)
-		}
-		if reflect.DeepEqual(fullPath, pbRootPath) { // Delete root
-			for k := range jsonTree {
-				delete(jsonTree, k)
-			}
-		}
-
-		// Apply the validated operation to the config tree and device.
-		if pathDeleted {
-			if err := c.UpdateValidatedConfig(crDeviceName, jsonTree); err != nil {
+		// trigger reconcile event
+		for _, path := range delPaths {
+			xpath := yparser.GnmiPath2XPath(path, true)
+			resourceName, err := c.findManagedResource(xpath, resourceList)
+			if err != nil {
 				return err
 			}
+
+			if *resourceName != unmanagedResource {
+				// TODO Trigger reconcile event
+				c.triggerReconcileEvent(resourceName)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *collector) handleUpdates(crDeviceName string, resourceList []*systemv1alpha1.Gvk, updates []*gnmi.Update) error {
+	if len(updates) > 0 {
+		/*
+			for _, u := range updates {
+				c.log.Debug("handleUpdates", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
+			}
+		*/
+
+		// validate updates
+		goStruct, err := c.cache.ValidateUpdate(crDeviceName, updates)
+		if err != nil {
+			return err
+		}
+		// update the config with the new struct
+		c.log.Debug("UpdateValidatedGoStruct", "deviceName", crDeviceName, "goStruct", goStruct, "updates", updates)
+		//c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
+
+		// check of we need to trigger a reconcile event
+		for _, u := range updates {
+			xpath := yparser.GnmiPath2XPath(u.GetPath(), true)
+			// check if this is a managed resource or unmanged resource
+			// name == unmanagedResource is an unmanaged resource
+			resourceName, err := c.findManagedResource(xpath, resourceList)
+			if err != nil {
+				return err
+			}
+			if *resourceName != unmanagedResource {
+				c.triggerReconcileEvent(resourceName)
+			}
+
 			/*
-				if s.callback != nil {
-					if applyErr := s.callback(newConfig); applyErr != nil {
-						if rollbackErr := s.callback(s.config); rollbackErr != nil {
-							return nil, status.Errorf(codes.Internal, "error in rollback the failed operation (%v): %v", applyErr, rollbackErr)
-						}
-						return nil, status.Errorf(codes.Aborted, "error in applying operation to device: %v", applyErr)
+				walkInternalGoStruct := true
+
+				if !walkInternalGoStruct {
+					// we create a json blob and merge this in the gostruct
+					fullPath := u.GetPath()
+					val := u.GetVal()
+					json, err := generateJson(u)
+					if err != nil {
+						c.log.Debug("generate json error", "err", err)
+						return err
 					}
-				}
-			*/
-		}
+					c.log.Debug("subscription config update", "path", yparser.GnmiPath2XPath(fullPath, true), "val", val)
+					//c.log.Debug("subscription config update", "path", yparser.GnmiPath2XPath(fullPath, true), "json", string(json))
 
-		/*
-			// update the cache with the latest config from the device
-			if err := c.cache.GetCache().GnmiUpdate(crDeviceName, n); err != nil {
-				c.log.Debug("handle target update", "error", err, "Path", xpath)
-				return errors.New("cache update failed")
-			}
-		*/
-
-		if *resourceName != unmanagedResource {
-			// TODO Trigger reconcile event
-			c.triggerReconcileEvent(resourceName)
-		}
-	}
-	return nil
-}
-
-func (c *collector) handleUpdates(crDeviceName string, resourceList []*systemv1alpha1.Gvk, jsonTree map[string]interface{}, upd []*gnmi.Update) error {
-	m := c.cache.GetModel(crDeviceName)
-	for _, u := range upd {
-		xpath := yparser.GnmiPath2XPath(u.GetPath(), true)
-		// check if this is a managed resource or unmanged resource
-		// name == unmanagedResource is an unmanaged resource
-		resourceName, err := c.findManagedResource(xpath, resourceList)
-		if err != nil {
-			return err
-		}
-		walkInternalGoStruct := true
-
-		if !walkInternalGoStruct {
-			// we create a json blob and merge this in the gostruct
-			fullPath := u.GetPath()
-			val := u.GetVal()
-			json, err := generateJson(u)
-			if err != nil {
-				c.log.Debug("generate json error", "err", err)
-				return err
-			}
-			c.log.Debug("subscription config update", "path", yparser.GnmiPath2XPath(fullPath, true), "val", val)
-			//c.log.Debug("subscription config update", "path", yparser.GnmiPath2XPath(fullPath, true), "json", string(json))
-
-			// create newGostruct which will not be validated
-			newGoStruct, err := m.NewConfigStruct(json, false)
-			if err != nil {
-				c.log.Debug("generate new gostruct", "err", err)
-				return err
-			}
-
-			// merge the newGostruct with the current config
-			currGoStruct := c.cache.GetValidatedGoStruct(crDeviceName)
-			if err := ygot.MergeStructInto(currGoStruct, newGoStruct); err != nil {
-				c.log.Debug("merge  gostructs", "err", err)
-				return err
-			}
-
-			// validate the merged config
-			if err := currGoStruct.Validate(); err != nil {
-				c.log.Debug("validate new gostructs", "error", err)
-				return err
-			}
-			// since validation is successfull we can set the newGostruct as the new valid config
-			c.cache.UpdateValidatedGoStruct(crDeviceName, newGoStruct)
-		} else {
-			fullPath := cleanPath(u.GetPath())
-			val := u.GetVal()
-
-			//c.log.Debug("subscription config update", "path", yparser.GnmiPath2XPath(fullPath, true), "val", val)
-
-			// Validate the operation
-			config := c.cache.GetValidatedGoStruct(crDeviceName)
-			emptyNode, _, err := ytypes.GetOrCreateNode(m.SchemaTreeRoot, config, fullPath)
-			if err != nil {
-				c.log.Debug("path not found in config structure", "path", fullPath, "error", err)
-				return errors.Wrap(err, fmt.Sprintf("path %v is not found in the config structure", fullPath))
-			}
-			//c.log.Debug("emptyNode", "emptyNode", emptyNode)
-			var nodeVal interface{}
-			nodeStruct, ok := emptyNode.(ygot.ValidatedGoStruct)
-			if ok {
-				if err := m.JsonUnmarshaler(val.GetJsonIetfVal(), nodeStruct); err != nil {
-					c.log.Debug("unmarshaling json data to config struct fails", "error", err)
-					return errors.Wrap(err, "unmarshaling json data to config struct fails")
-				}
-				if err := nodeStruct.Validate(); err != nil {
-					c.log.Debug("config data validation fails", "error", err)
-					return errors.Wrap(err, "config data validation fails")
-				}
-				var err error
-				if nodeVal, err = ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{}); err != nil {
-					c.log.Debug("error in constructing IETF JSON tree from config struct", "error", err)
-					return errors.Wrap(err, "error in constructing IETF JSON tree from config struct:")
-				}
-			} else {
-				var err error
-				if nodeVal, err = value.ToScalar(val); err != nil {
-					c.log.Debug("cannot convert leaf node to scalar type", "error", err)
-					return errors.Wrap(err, "cannot convert leaf node to scalar type")
-				}
-			}
-
-			// Update json tree of the device config.
-			var curNode interface{} = jsonTree
-			schema := m.SchemaTreeRoot
-			for i, elem := range fullPath.GetElem() {
-				switch node := curNode.(type) {
-				case map[string]interface{}:
-					// Set node value.
-					if i == len(fullPath.GetElem())-1 {
-						//c.log.Debug("getChildNode last elem", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "node", node)
-						if elem.GetKey() == nil {
-							if grpcStatusError := setPathWithoutAttribute(gnmi.UpdateResult_UPDATE, node, elem, nodeVal); grpcStatusError != nil {
-								c.log.Debug("setPathWithoutAttribute", "path", yparser.GnmiPath2XPath(fullPath, true), "error", grpcStatusError)
-								return grpcStatusError
-							}
-							break
-						}
-						if grpcStatusError := c.setPathWithAttribute(gnmi.UpdateResult_UPDATE, node, elem, nodeVal); grpcStatusError != nil {
-							c.log.Debug("setPathWithAttribute", "path", yparser.GnmiPath2XPath(fullPath, true), "error", grpcStatusError)
-							return grpcStatusError
-						}
-						break
+					// create newGostruct which will not be validated
+					newGoStruct, err := m.NewConfigStruct(json, false)
+					if err != nil {
+						c.log.Debug("generate new gostruct", "err", err)
+						return err
 					}
-					//c.log.Debug("getChildNode before", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "node", node)
-					if curNode, schema = c.getChildNode(node, schema, elem, true); curNode == nil {
-						c.log.Debug("path elem not found", "elem", elem)
-						return errors.Wrap(err, fmt.Sprintf("path elem not found: %v", elem))
+
+					// merge the newGostruct with the current config
+					currGoStruct := c.cache.GetValidatedGoStruct(crDeviceName)
+					if err := ygot.MergeStructInto(currGoStruct, newGoStruct); err != nil {
+						c.log.Debug("merge  gostructs", "err", err)
+						return err
 					}
-					//c.log.Debug("getChildNode after", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "newNode", curNode)
-				case []interface{}:
-					c.log.Debug("wrong type incompatible path elem", "elem", elem)
-					return errors.Wrap(err, fmt.Sprintf("incompatible path elem: %v", elem))
-				default:
-					c.log.Debug("wrong type", "node", curNode)
-					return errors.Wrap(err, fmt.Sprintf("wrong node type: %T", curNode))
+
+					// validate the merged config
+					if err := currGoStruct.Validate(); err != nil {
+						c.log.Debug("validate new gostructs", "error", err)
+						return err
+					}
+					// since validation is successfull we can set the newGostruct as the new valid config
+					c.cache.UpdateValidatedGoStruct(crDeviceName, newGoStruct)
 				}
-			}
-			if reflect.DeepEqual(fullPath, pbRootPath) { // Replace/Update root.
-				//if op == gnmi.UpdateResult_UPDATE {
-				return errors.Wrap(err, "update the root of config tree is unsupported")
-				//}
-
-				//	nodeValAsTree, ok := nodeVal.(map[string]interface{})
-				//	if !ok {
-				//		return errors.Wrap(err, fmt.Sprintf("expect a tree to replace the root, got a scalar value: %T", nodeVal))
-				//	}
-				//	for k := range jsonTree {
-				//		delete(jsonTree, k)
-				//	}
-				//	for k, v := range nodeValAsTree {
-				//		jsonTree[k] = v
-				//	}
-
-			}
-
-			if err := c.UpdateValidatedConfig(crDeviceName, jsonTree); err != nil {
-				return err
-			}
-		}
-
-		// TO BE ADDED AGAIN
-
-		/*
-			// update the cache with the latest config from the device
-			if err := c.cache.GetCache().GnmiUpdate(crDeviceName, n); err != nil {
-				for _, u := range n.GetUpdate() {
-					c.log.Debug("collector config update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "value", u.GetVal(), "error", err)
-				}
-				return errors.Wrap(err, "cache update failed")
-			}
-
-			for _, u := range n.GetUpdate() {
-				c.log.Debug("collector config update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "value", u.GetVal())
-			}
-		*/
-
-		if *resourceName != unmanagedResource {
-			c.triggerReconcileEvent(resourceName)
+				}*/
 		}
 	}
-	return nil
-}
-
-func (c *collector) UpdateValidatedConfig(crDeviceName string, jsonTree map[string]interface{}) error {
-	m := c.cache.GetModel(crDeviceName)
-	jsonDump, err := json.Marshal(jsonTree)
-	if err != nil {
-		return fmt.Errorf("error in marshaling IETF JSON tree to bytes: %v", err)
-	}
-	goStruct, err := m.NewConfigStruct(jsonDump, true)
-	if err != nil {
-		return fmt.Errorf("error in creating config struct from IETF JSON data: %v", err)
-	}
-	c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
 	return nil
 }
 
@@ -360,13 +182,16 @@ func (c *collector) findManagedResource(xpath string, resourceList []*systemv1al
 	matchedResourceName := unmanagedResource
 	matchedResourcePath := ""
 	for _, r := range resourceList {
-		if strings.Contains(xpath, r.Rootpath) {
-			// if there is a better match we use the better match
-			if len(r.Rootpath) > len(matchedResourcePath) {
-				matchedResourcePath = r.Rootpath
-				matchedResourceName = r.Name
+		for _, path := range r.Paths {
+			if strings.Contains(xpath, path) {
+				// if there is a better match we use the better match
+				if len(path) > len(matchedResourcePath) {
+					matchedResourcePath = path
+					matchedResourceName = r.Name
+				}
 			}
 		}
+
 	}
 	return &matchedResourceName, nil
 }
@@ -416,135 +241,6 @@ func getObject(gvk *gvkresource.GVK) client.Object {
 		fmt.Printf("getObject not found gvk: %v\n", *gvk)
 		return nil
 	}
-}
-
-// gnmiFullPath builds the full path from the prefix and path.
-func gnmiFullPath(prefix, path *gnmi.Path) *gnmi.Path {
-	fullPath := &gnmi.Path{Origin: path.Origin}
-	if path.GetElement() != nil {
-		fullPath.Element = append(prefix.GetElement(), path.GetElement()...)
-	}
-	if path.GetElem() != nil {
-		fullPath.Elem = append(prefix.GetElem(), path.GetElem()...)
-	}
-	return fullPath
-}
-
-// setPathWithoutAttribute replaces or updates a child node of curNode in the
-// IETF config tree, where the child node is indexed by pathElem without
-// attribute. The function returns grpc status error if unsuccessful.
-func setPathWithoutAttribute(op gnmi.UpdateResult_Operation, curNode map[string]interface{}, pathElem *gnmi.PathElem, nodeVal interface{}) error {
-	target, hasElem := curNode[pathElem.Name]
-	nodeValAsTree, nodeValIsTree := nodeVal.(map[string]interface{})
-	if op == gnmi.UpdateResult_REPLACE || !hasElem || !nodeValIsTree {
-		curNode[pathElem.Name] = nodeVal
-		return nil
-	}
-	targetAsTree, ok := target.(map[string]interface{})
-	if !ok {
-		return status.Errorf(codes.Internal, "error in setting path: expect map[string]interface{} to update, got %T", target)
-	}
-	for k, v := range nodeValAsTree {
-		targetAsTree[k] = v
-	}
-	return nil
-}
-
-// setPathWithAttribute replaces or updates a child node of curNode in the IETF
-// JSON config tree, where the child node is indexed by pathElem with attribute.
-// The function returns grpc status error if unsuccessful.
-func (c *collector) setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]interface{}, pathElem *gnmi.PathElem, nodeVal interface{}) error {
-	nodeValAsTree, ok := nodeVal.(map[string]interface{})
-	if !ok {
-		return status.Errorf(codes.InvalidArgument, "expect nodeVal is a json node of map[string]interface{}, received %T", nodeVal)
-	}
-	m := c.getKeyedListEntry(curNode, pathElem, true)
-	if m == nil {
-		return status.Errorf(codes.NotFound, "path elem not found: %v", pathElem)
-	}
-	if op == gnmi.UpdateResult_REPLACE {
-		for k := range m {
-			delete(m, k)
-		}
-	}
-	for attrKey, attrVal := range pathElem.GetKey() {
-		m[attrKey] = attrVal
-		if asNum, err := strconv.ParseFloat(attrVal, 64); err == nil {
-			m[attrKey] = asNum
-		}
-		for k, v := range nodeValAsTree {
-			if k == attrKey && fmt.Sprintf("%v", v) != attrVal {
-				return status.Errorf(codes.InvalidArgument, "invalid config data: %v is a path attribute", k)
-			}
-		}
-	}
-	for k, v := range nodeValAsTree {
-		m[k] = v
-	}
-	return nil
-}
-
-// deleteKeyedListEntry deletes the keyed list entry from node that matches the
-// path elem. If the entry is the only one in keyed list, deletes the entire
-// list. If the entry is found and deleted, the function returns true. If it is
-// not found, the function returns false.
-func deleteKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem) bool {
-	curNode, ok := node[elem.Name]
-	if !ok {
-		return false
-	}
-
-	keyedList, ok := curNode.([]interface{})
-	if !ok {
-		return false
-	}
-	for i, n := range keyedList {
-		m, ok := n.(map[string]interface{})
-		if !ok {
-			fmt.Printf("expect map[string]interface{} for a keyed list entry, got %T", n)
-			return false
-		}
-		keyMatching := true
-		for k, v := range elem.Key {
-			attrVal, ok := m[k]
-			if !ok {
-				return false
-			}
-			if v != fmt.Sprintf("%v", attrVal) {
-				keyMatching = false
-				break
-			}
-		}
-		if keyMatching {
-			listLen := len(keyedList)
-			if listLen == 1 {
-				delete(node, elem.Name)
-				return true
-			}
-			keyedList[i] = keyedList[listLen-1]
-			node[elem.Name] = keyedList[0 : listLen-1]
-			return true
-		}
-	}
-	return false
-}
-
-func cleanPath(path *gnmi.Path) *gnmi.Path {
-	// clean the path for now to remove the module information from the pathElem
-	p := yparser.DeepCopyGnmiPath(path)
-	for _, pe := range p.GetElem() {
-		pe.Name = strings.Split(pe.Name, ":")[len(strings.Split(pe.Name, ":"))-1]
-		keys := make(map[string]string)
-		for k, v := range pe.GetKey() {
-			if strings.Contains(v, "::") {
-				keys[strings.Split(k, ":")[len(strings.Split(k, ":"))-1]] = v
-			} else {
-				keys[strings.Split(k, ":")[len(strings.Split(k, ":"))-1]] = strings.Split(v, ":")[len(strings.Split(v, ":"))-1]
-			}
-		}
-		pe.Key = keys
-	}
-	return p
 }
 
 func generateJson(u *gnmi.Update) ([]byte, error) {

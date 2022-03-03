@@ -41,6 +41,8 @@ import (
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/ndd-yang/pkg/yresource"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -249,84 +251,89 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 		return managed.ExternalObservation{}, errors.New(errUnexpectedDevice)
 	}
 
-	paths, err := e.getRootPaths(cr.Spec.Device)
+	// TODO get paths dynamically
+
+	paths, err := e.findPaths(cr.Spec.Device)
 	if err != nil {
 		return managed.ExternalObservation{}, err
 	}
 
 	for _, path := range paths {
-		log.Debug("path", "path", yparser.GnmiPath2XPath(path, true))
+		log.Debug("findPaths", "path", yparser.GnmiPath2XPath(path, true))
 	}
-
 	/*
-		gvkTransaction, err := gvkresource.GetGvkTransaction(mg)
-		if err != nil {
-			return managed.ExternalObservation{}, err
-		}
-
-		// gnmi get request
-		req := &gnmi.GetRequest{
-			//Prefix:   &gnmi.Path{Target: GnmiTarget, Origin: GnmiOrigin},
-			Prefix:   &gnmi.Path{Target: shared.GetCrDeviceName(mg.GetNamespace(), cr.GetNetworkNodeReference().Name)},
-			Path:     paths,
-			Encoding: gnmi.Encoding_JSON,
-			//Type:     gnmi.GetRequest_DataType(gnmi.GetRequest_STATE),
-			Extension: []*gnmi_ext.Extension{
-				{Ext: &gnmi_ext.Extension_RegisteredExt{
-					RegisteredExt: &gnmi_ext.RegisteredExtension{Id: gnmi_ext.ExtensionID_EID_EXPERIMENTAL, Msg: []byte(gvkTransaction)}}},
+		paths := []*gnmi.Path{
+			{
+				Elem: []*gnmi.PathElem{{Name: "interface", Key: map[string]string{"name": "ethernet-1/49"}}},
 			},
 		}
-
-		// gnmi get response
-		exists := true
-		resp, err := e.client.Get(ctx, req)
 	*/
-	/*
-		if err != nil {
-			if er, ok := status.FromError(err); ok {
-				switch er.Code() {
-				case codes.ResourceExhausted:
-					// we use this to signal the device or cache is exhausted
-					return managed.ExternalObservation{
-						Ready:      false,
-						Exhausted:  true,
-						Exists:     false,
-						Pending:    true,
-						Failed:     true,
-						HasData:    false,
-						IsUpToDate: false,
-					}, nil
-				case codes.Unavailable:
-					// we use this to signal not ready
-					return managed.ExternalObservation{
-						Ready:      false,
-						Exists:     false,
-						Pending:    true,
-						Failed:     true,
-						HasData:    false,
-						IsUpToDate: false,
-					}, nil
-				case codes.NotFound:
-					// the k8s resource does not exists but the data can still exist
-					// if data exists it means we go from UMR -> MR
-					exists = false
-				case codes.AlreadyExists:
-					// the system cache has the resource but the action did not complete so we should skip the next reconcilation
-					// loop and wait
-					return managed.ExternalObservation{
-						Ready:      true,
-						Exhausted:  false,
-						Exists:     true,
-						Pending:    true,
-						Failed:     false,
-						HasData:    false,
-						IsUpToDate: false,
-					}, nil
-				case codes.FailedPrecondition:
-					// the k8s resource exists but is in failed status, compare the response spec with current spec
-					// if the specs are equal return observation.ResponseSuccess -> False
-					// if the specs are not equal follow the regular procedure
-					//log.Debug("observing when using gnmic: resource failed")
+
+	gvkName := gvkresource.GetGvkName(mg)
+
+	crDeviceName := "ygot." + shared.GetCrDeviceName(mg.GetNamespace(), cr.GetNetworkNodeReference().Name)
+
+	// gnmi get request
+	req := &gnmi.GetRequest{
+		Prefix:   &gnmi.Path{Target: crDeviceName},
+		Path:     paths,
+		Encoding: gnmi.Encoding_JSON,
+		Extension: []*gnmi_ext.Extension{
+			{Ext: &gnmi_ext.Extension_RegisteredExt{
+				RegisteredExt: &gnmi_ext.RegisteredExtension{Id: gnmi_ext.ExtensionID_EID_EXPERIMENTAL, Msg: []byte(gvkName)}}},
+		},
+	}
+
+	// gnmi get response
+	exists := true
+	resp, err := e.client.Get(ctx, req)
+	if err != nil {
+		if er, ok := status.FromError(err); ok {
+			switch er.Code() {
+			case codes.ResourceExhausted:
+				// we use this to signal the device or cache is exhausted
+				return managed.ExternalObservation{
+					Ready:      false,
+					Exhausted:  true,
+					Exists:     false,
+					Pending:    true,
+					Failed:     true,
+					HasData:    false,
+					IsUpToDate: false,
+				}, nil
+			case codes.Unavailable:
+				// we use this to signal not ready
+				return managed.ExternalObservation{
+					Ready:      false,
+					Exists:     false,
+					Pending:    true,
+					Failed:     true,
+					HasData:    false,
+					IsUpToDate: false,
+				}, nil
+			case codes.NotFound:
+				// the k8s resource does not exists but the data can still exist
+				// if data exists it means we go from UMR -> MR
+				exists = false
+			case codes.AlreadyExists:
+				// the system cache has the resource but the action did not complete so we should skip the next reconcilation
+				// loop and wait
+				return managed.ExternalObservation{
+					Ready:      true,
+					Exhausted:  false,
+					Exists:     true,
+					Pending:    true,
+					Failed:     false,
+					HasData:    false,
+					IsUpToDate: false,
+				}, nil
+			case codes.FailedPrecondition:
+				// the k8s resource exists but is in failed status, compare the response spec with current spec
+				// if the specs are equal return observation.ResponseSuccess -> False
+				// if the specs are not equal follow the regular procedure
+				//log.Debug("observing when using gnmic: resource failed")
+				// TODO
+				/*
 					failedObserve, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
 					if err != nil {
 						return managed.ExternalObservation{}, err
@@ -353,10 +360,15 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 							IsUpToDate: false,
 						}, nil
 					}
-				}
+				*/
 			}
 		}
-	*/
+	}
+	for _, n := range resp.GetNotification() {
+		for _, u := range n.GetUpdate() {
+			log.Debug("Observe Response", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "value", u.GetVal())
+		}
+	}
 
 	/*
 		// processObserve
@@ -414,7 +426,7 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 	*/
 	return managed.ExternalObservation{
 		Ready:      true,
-		Exists:     true,
+		Exists:     exists,
 		Pending:    false,
 		Failed:     false,
 		HasData:    true,
@@ -423,53 +435,47 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 }
 
 func (e *externalDevice) Create(ctx context.Context, mg resource.Managed, ignoreTransaction bool) error {
-	//log := e.log.WithValues("Resource", mg.GetName())
-	//log.Debug("Creating ...")
-
-	/*
-		cr, ok := mg.(*srlv1alpha1.Srl3Device)
-		if !ok {
-			return errors.New(errUnexpectedDevice)
-		}
-	*/
+	log := e.log.WithValues("Resource", mg.GetName())
+	log.Debug("Creating ...")
 
 	// get the rootpath of the resource
 	//rootPath := e.y.GetRootPath(mg)
+
+	paths := []*gnmi.Path{
+		{
+			Elem: []*gnmi.PathElem{{Name: "interface", Key: map[string]string{"name": "ethernet-1/49"}}},
+		},
+	}
 
 	// create k8s object
 	// processCreate
 	// 0. marshal/unmarshal data
 	// 1. transform the spec data to gnmi updates
-	/*
-		updates, err := processCreateK8s(mg, rootPath[0], &cr.Spec, e.deviceSchema, e.nddpSchema, ignoreTransaction)
-		if err != nil {
-			return errors.Wrap(err, errCreateObject)
-		}
-	*/
-	/*
-		for _, update := range updates {
-			log.Debug("Create Fine Grane Updates", "Path", yparser.GnmiPath2XPath(update.Path, true), "Value", update.GetVal())
-		}
+	updates, err := e.processCreateK8s(mg, paths)
+	if err != nil {
+		return errors.Wrap(err, errCreateObject)
+	}
 
-		if len(updates) == 0 {
-			log.Debug("cannot create object since there are no updates present")
-			return errors.Wrap(err, errCreateObject)
-		}
-	*/
+	for _, update := range updates {
+		log.Debug("Create Fine Grane Updates", "Path", yparser.GnmiPath2XPath(update.Path, true), "Value", update.GetVal())
+	}
 
-	/*
-		crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
+	if len(updates) == 0 {
+		log.Debug("cannot create object since there are no updates present")
+		return errors.Wrap(err, errCreateObject)
+	}
 
-		req := &gnmi.SetRequest{
-			Prefix:  &gnmi.Path{Target: crSystemDeviceName},
-			Replace: updates,
-		}
+	crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
 
-		_, err = e.client.Set(ctx, req)
-		if err != nil {
-			return errors.Wrap(err, errCreateDevice)
-		}
-	*/
+	req := &gnmi.SetRequest{
+		Prefix:  &gnmi.Path{Target: crSystemDeviceName},
+		Replace: updates,
+	}
+
+	_, err = e.client.Set(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, errCreateDevice)
+	}
 
 	return nil
 }

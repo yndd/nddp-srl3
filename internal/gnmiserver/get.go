@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/gnxi/utils/xpath"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/gnmi/value"
 	"github.com/openconfig/ygot/util"
@@ -118,8 +117,8 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 		if exhausted != 0 {
 			return nil, status.Errorf(codes.ResourceExhausted, "device exhausted")
 		}
-		gvkTransaction := req.GetExtension()[0].GetRegisteredExt().GetMsg()
-		if string(gvkTransaction) == gvkresource.Operation_GetResourceNameFromPath {
+		gvkName := req.GetExtension()[0].GetRegisteredExt().GetMsg()
+		if string(gvkName) == gvkresource.Operation_GetResourceNameFromPath {
 			// procedure to get resource name
 			updates, err := s.getResourceName(systemTarget, req.GetPath()[0])
 			if err != nil {
@@ -132,110 +131,47 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 			}
 			return notifications, nil
 		} else {
-			// this is a regular get but we need to check in the systemDevice cache
-			// if a managed resource exists or not. The outcome determines if the managed resource will be created
-			gvkt, err := gvkresource.String2GvkTransaction(string(gvkTransaction))
+			// regular resource which is not part of a trancation
+			gvk, err := s.getResource(systemTarget, string(gvkName))
 			if err != nil {
 				return nil, status.Error(codes.Internal, err.Error())
 			}
-			s.log.Debug("gvkTransaction", "gvkname", gvkt.GVKName, "transaction", gvkt.Transaction, "transactionGeneration", gvkt.TransactionGeneration)
-
-			if gvkt.Transaction != gvkresource.TransactionNone {
-				// resource which is part of a transaction
-				gvk, err := s.getResource(systemTarget, gvkt.GVKName)
-				if err != nil {
-					return nil, status.Error(codes.Internal, err.Error())
-				}
-				if gvk == nil {
-					// transaction does not exist
-					exists = false
-				} else {
-					if gvk.Transaction != gvkt.Transaction {
-						// transaction does not exist
-						exists = false
-					} else {
-						// dont validate the status when we delete -> we assume if you were able to create it you should be able to delete it
-						if gvk.Action == systemv1alpha1.E_GvkAction_TransactionDelete {
-							switch gvk.Status {
-							case systemv1alpha1.E_GvkStatus_Transactionpending:
-								// check if the transaction still exists
-								t, err := s.getTransaction(systemTarget, gvkt.Transaction)
-								if err != nil {
-									return nil, status.Error(codes.Internal, err.Error())
-								}
-								if t != nil {
-									// the transaction is not complete yet so we keep it in this status
-									// to ensure the gvk resource is not deleted
-									return nil, status.Error(codes.AlreadyExists, "")
-
-								} else {
-
-									exists = false
-								}
-
-							}
-						} else {
-							switch gvk.Status {
-							case systemv1alpha1.E_GvkStatus_Failed:
-								// we validate the failed status for upates and creates but not for deletes
-								// resource exists, but failed, return the spec data
-								x, err := s.getSpecdata(systemTarget, gvk)
-								if err != nil {
-									return nil, status.Error(codes.Internal, err.Error())
-								}
-								if updates, err = appendUpdateResponse(x, req.GetPath()[0], updates); err != nil {
-									return nil, status.Error(codes.Internal, err.Error())
-								}
-								return notifications, status.Error(codes.FailedPrecondition, "resource exist, but failed")
-							case systemv1alpha1.E_GvkStatus_Transactionpending:
-								// the transaction is not complete yet so we keep it in this status
-								return nil, status.Error(codes.AlreadyExists, "")
-							}
-						}
-					}
-				}
+			if gvk == nil {
+				exists = false
 			} else {
-				// regular resource which is not part of a trancation
-				gvk, err := s.getResource(systemTarget, gvkt.GVKName)
-				if err != nil {
-					return nil, status.Error(codes.Internal, err.Error())
-				}
-				if gvk == nil {
-					exists = false
+				if gvk.Action != systemv1alpha1.E_GvkAction_Delete {
+					switch gvk.Status {
+					case systemv1alpha1.E_GvkStatus_Deletepending:
+						// the action did not complete so far
+						return nil, status.Error(codes.AlreadyExists, "")
+					}
 				} else {
-
-					if gvk.Action != systemv1alpha1.E_GvkAction_Delete {
-						switch gvk.Status {
-						case systemv1alpha1.E_GvkStatus_Deletepending:
-							// the action did not complete so far
-							return nil, status.Error(codes.AlreadyExists, "")
+					switch gvk.Status {
+					case systemv1alpha1.E_GvkStatus_Failed:
+						// resource exists, but failed, return the spec data
+						x, err := s.getSpecdata(systemTarget, gvk)
+						if err != nil {
+							return nil, status.Error(codes.Internal, err.Error())
 						}
-					} else {
-						switch gvk.Status {
-						case systemv1alpha1.E_GvkStatus_Failed:
-							// resource exists, but failed, return the spec data
-							x, err := s.getSpecdata(systemTarget, gvk)
-							if err != nil {
-								return nil, status.Error(codes.Internal, err.Error())
-							}
-							if updates, err = appendUpdateResponse(x, req.GetPath()[0], updates); err != nil {
-								return nil, status.Error(codes.Internal, err.Error())
-							}
-							notifications[0] = &gnmi.Notification{
-								Timestamp: ts,
-								Prefix:    prefix,
-								Update:    updates,
-							}
-							return notifications, status.Error(codes.FailedPrecondition, "resource exist, but failed")
-						case systemv1alpha1.E_GvkStatus_Createpending, systemv1alpha1.E_GvkStatus_Updatepending:
-							// the action did not complete so far
-							return nil, status.Error(codes.AlreadyExists, "")
+						if updates, err = appendUpdateResponse(x, req.GetPath()[0], updates); err != nil {
+							return nil, status.Error(codes.Internal, err.Error())
 						}
+						notifications[0] = &gnmi.Notification{
+							Timestamp: ts,
+							Prefix:    prefix,
+							Update:    updates,
+						}
+						return notifications, status.Error(codes.FailedPrecondition, "resource exist, but failed")
+					case systemv1alpha1.E_GvkStatus_Createpending, systemv1alpha1.E_GvkStatus_Updatepending:
+						// the action did not complete so far
+						return nil, status.Error(codes.AlreadyExists, "")
 					}
 				}
 			}
 		}
 	}
+
+	s.log.Debug("Get Cache", "ygot", ygotCache, "exists", exists)
 
 	for i, path := range req.GetPath() {
 		if ygotCache {
@@ -408,10 +344,11 @@ func (s *server) getResourceName(crSystemDeviceName string, reqpath *gnmi.Path) 
 		if resource != nil {
 			//s.log.Debug("K8sResource GetResourceName Match", "resource", resource)
 			// check if the string is contained in the path
-			if strings.Contains(reqPath, resource.Rootpath) {
+			// TOOOODOOOO UPDATE TO the new Paths procesure
+			if strings.Contains(reqPath, resource.Paths[0]) {
 				// if there is a better match we use the better match
-				if len(resource.Rootpath) > len(matchedResourcePath) {
-					matchedResourcePath = resource.Rootpath
+				if len(resource.Paths) > len(matchedResourcePath) {
+					matchedResourcePath = resource.Paths[0]
 					matchedResourceName = resource.Name
 				}
 			}
@@ -448,15 +385,17 @@ func (s *server) getSpecdata(crSystemDeviceName string, resource *systemv1alpha1
 		return nil, err
 	}
 	// remove the rootPath data
-	rootPath, err := xpath.ToGNMIPath(resource.Rootpath)
-	if err != nil {
-		return nil, err
-	}
-	switch x := x1.(type) {
-	case map[string]interface{}:
-		x1 = x["data"]
-		x1 = getDataFromRootPath(rootPath, x1)
-	}
+	/*
+		rootPath, err := xpath.ToGNMIPath(resource.Rootpath)
+		if err != nil {
+			return nil, err
+		}
+		switch x := x1.(type) {
+		case map[string]interface{}:
+			x1 = x["data"]
+			x1 = getDataFromRootPath(rootPath, x1)
+		}
+	*/
 	return x1, nil
 }
 
