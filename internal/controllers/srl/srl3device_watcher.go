@@ -30,6 +30,9 @@ import (
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 )
 
+type adder interface {
+	Add(item interface{})
+}
 type EnqueueRequestForAllDevice struct {
 	client client.Client
 	log    logging.Logger

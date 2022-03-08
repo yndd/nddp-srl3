@@ -17,7 +17,6 @@ limitations under the License.
 package devicereconciler
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
@@ -223,33 +222,48 @@ func (r *reconciler) deleteResource(resourceGvkName string) error {
 	return nil
 }
 
-func (r *reconciler) updateResourceStatus(resourceGvkName string, status systemv1alpha1.E_GvkStatus) error {
+func (r *reconciler) updateResourceStatus(resourceGvkName string, status systemv1alpha1.E_GvkStatus, failedErr error) error {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	if resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf1" ||
-		resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf2" {
-		fmt.Printf("updateResourceStatus system-bgp %s\n", status)
+	/*
+		if resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf1" ||
+			resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf2" {
+			fmt.Printf("updateResourceStatus system-bgp %s\n", status)
+		}
+		if resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlNetworkinstanceProtocolsBgp/default/nokia.region1.infrastructure.infra.default-leaf1" ||
+			resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlNetworkinstanceProtocolsBgp/default/nokia.region1.infrastructure.infra.default-leaf2" {
+			fmt.Printf("updateResourceStatus protocol-bgp %s\n", status)
+		}
+	*/
+
+	updates := []*gnmi.Update{
+		{
+			Path: &gnmi.Path{
+				Elem: []*gnmi.PathElem{
+					{Name: "gvk", Key: map[string]string{"name": resourceGvkName}},
+					{Name: "status"},
+				},
+			},
+			Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_StringVal{StringVal: string(status)}},
+		},
 	}
-	if resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlNetworkinstanceProtocolsBgp/default/nokia.region1.infrastructure.infra.default-leaf1" ||
-		resourceGvkName == "srl.nddp.yndd.io/v1alpha1/SrlNetworkinstanceProtocolsBgp/default/nokia.region1.infrastructure.infra.default-leaf2" {
-		fmt.Printf("updateResourceStatus protocol-bgp %s\n", status)
+	if failedErr != nil {
+		updates = append(updates, &gnmi.Update{
+			Path: &gnmi.Path{
+				Elem: []*gnmi.PathElem{
+					{Name: "gvk", Key: map[string]string{"name": resourceGvkName}},
+					{Name: "reason"},
+				},
+			},
+			Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_StringVal{StringVal: string(failedErr.Error())}},
+		})
 	}
 
 	n := &gnmi.Notification{
 		Timestamp: time.Now().UnixNano(),
 		Prefix:    &gnmi.Path{Target: crSystemDeviceName},
-		Update: []*gnmi.Update{
-			{
-				Path: &gnmi.Path{
-					Elem: []*gnmi.PathElem{
-						{Name: "gvk", Key: map[string]string{"name": resourceGvkName}},
-						{Name: "status"},
-					},
-				},
-				Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_StringVal{StringVal: string(status)}},
-			},
-		},
+		Update:    updates,
 	}
 
 	if err := r.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {

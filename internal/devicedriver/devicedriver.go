@@ -42,8 +42,8 @@ import (
 	"github.com/yndd/nddp-srl3/internal/gnmiserver"
 	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-srl3/internal/shared"
-	"github.com/yndd/nddp-srl3/pkg/ygotnddp"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
+	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -331,7 +331,7 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	}
 	d.printDeviceCapabilities(cap)
 
-	/// initialize model
+	/// initialize device model
 	d.cache.SetModel(crDeviceName, getDeviceModel(cap))
 	ddd.deviceCallback = ddd.ygotDeviceCallback
 	ddd.systemCallback = ddd.ygotSystemCallback
@@ -343,13 +343,14 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	}
 	d.log.Debug("deviceDetails", "info", ddd.deviceDetails)
 
-	// initialize the system device model
+	// initialize the system model
 	d.cache.SetModel(crSystemDeviceName, getSystemModel())
 
-	// initialize cache with target
+	// initialize cache with device target
 	if !d.cache.GetCache().GetCache().HasTarget(crDeviceName) {
 		d.cache.GetCache().GetCache().Add(crDeviceName)
 	}
+	// initialize cache with system target
 	if !d.cache.GetCache().GetCache().HasTarget(crSystemDeviceName) {
 		d.cache.GetCache().GetCache().Add(crSystemDeviceName)
 	}
@@ -372,7 +373,12 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 
 	if err := ddd.validateDeviceConfig(); err != nil {
 		d.log.Debug("validateConfig", "error", err)
-		return errors.Wrap(err, "cannot validate config")
+		return errors.Wrap(err, "cannot validate device config")
+	}
+
+	if err := ddd.validateSystemConfig(); err != nil {
+		d.log.Debug("validateSystemConfig", "error", err)
+		return errors.Wrap(err, "cannot validate system config")
 	}
 
 	// start per device reconciler
@@ -397,8 +403,6 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	}
 	ddd.collector.Start()
 
-	// TODO SET THE CACHE STATE TO READY
-
 	return nil
 }
 
@@ -418,8 +422,9 @@ func (d *deviceDriver) deleteDevice(du shared.DeviceUpdate) error {
 		ddd.collector.Stop()
 	}
 
-	// delete the device from the cache
+	// delete the device target from the cache
 	d.cache.GetCache().GetCache().Remove(crDeviceName)
+	// delete the system target from the cache
 	d.cache.GetCache().GetCache().Remove(crSystemDeviceName)
 
 	return nil
@@ -436,9 +441,9 @@ func getSystemModel() *model.Model {
 	return &model.Model{
 		ModelData:       modelData,
 		StructRootType:  reflect.TypeOf((*ygotnddp.Device)(nil)),
-		SchemaTreeRoot:  ygotsrl.SchemaTree["Device"],
-		JsonUnmarshaler: ygotsrl.Unmarshal,
-		EnumData:        ygotsrl.ΛEnum,
+		SchemaTreeRoot:  ygotnddp.SchemaTree["Device"],
+		JsonUnmarshaler: ygotnddp.Unmarshal,
+		EnumData:        ygotnddp.ΛEnum,
 	}
 }
 
@@ -476,7 +481,7 @@ func (ddd *deviceInfo) validateDeviceConfig() error {
 
 	rootStruct, err := ddd.cache.GetModel(crDeviceName).NewConfigStruct(config, true)
 	if err != nil {
-		ddd.log.Debug("NewConfigStruct error", "error", err)
+		ddd.log.Debug("NewConfigStruct Device config error", "error", err)
 		return err
 	}
 	if config != nil && ddd.deviceCallback != nil {
@@ -485,8 +490,6 @@ func (ddd *deviceInfo) validateDeviceConfig() error {
 			return err
 		}
 	}
-	//ddd.log.Debug("validateDeviceConfig", "deviceNme", crDeviceName, "gostruct", ddd.cache.GetValidatedGoStruct(crDeviceName))
-
 	return nil
 }
 
@@ -543,24 +546,36 @@ func (ddd *deviceInfo) ygotDeviceCallback(c ygot.ValidatedGoStruct) error { // A
 func (ddd *deviceInfo) validateSystemConfig() error {
 	// TBD RELATIVE LEAFREF IS AN ISSUE In YGOT
 
-	config := []byte("{}")
+	nddpData := &ygotnddp.Device{
+		Cache: &ygotnddp.NddpSystem_Cache{
+			Update:       ygot.Bool(false),
+			Exhausted:    ygot.Uint32(0),
+			ExhaustedNbr: ygot.Uint64(0),
+		},
+	}
+
+	nddpJson, err := ygot.EmitJSON(nddpData, &ygot.EmitJSONConfig{
+		Format: ygot.RFC7951,
+	})
+	if err != nil {
+		return err
+	}
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	rootStruct, err := ddd.cache.GetModel(crSystemDeviceName).NewConfigStruct(config, true)
+	rootStruct, err := ddd.cache.GetModel(crSystemDeviceName).NewConfigStruct([]byte(nddpJson), true)
 	if err != nil {
-		ddd.log.Debug("NewConfigStruct error", "error", err)
+		ddd.log.Debug("NewConfigStruct System config error", "error", err)
 		return err
 	}
-	if config != nil && ddd.systemCallback != nil {
+	if []byte(nddpJson) != nil && ddd.systemCallback != nil {
 		if err := ddd.systemCallback(rootStruct); err != nil {
 			ddd.log.Debug("callback error", "error", err)
 			return err
 		}
 	}
 
-	//ddd.log.Debug("validateSystemConfig: deviceNme: %s, gostruct: %v\n", crSystemDeviceName, ddd.cache.GetValidatedGoStruct(crSystemDeviceName))
 	return nil
 }
 
@@ -572,25 +587,27 @@ func (ddd *deviceInfo) ygotSystemCallback(c ygot.ValidatedGoStruct) error { // A
 	ddd.cache.UpdateValidatedGoStruct(crSystemDeviceName, c)
 
 	// we dont validate the cache
-	ns, err := ygot.TogNMINotifications(ddd.cache.GetValidatedGoStruct(crDeviceName), time.Now().UnixNano(), ygot.GNMINotificationsConfig{
-		UsePathElem: true,
-	})
-	if err != nil {
-		return err
-	}
-
-	for _, n := range ns {
-		/*
-			for _, u := range n.GetUpdate() {
-				ddd.log.Debug("Update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
-			}
-		*/
-		if err := ddd.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
-			//log.Debug("handle target update", "error", err, "Path", yparser.GnmiPath2XPath(u.GetPath(), true), "Value", u.GetVal())
-			//log.Debug("handle target update", "error", err, "Notification", *n)
-			return errors.New("cache update failed")
+	/*
+		ns, err := ygot.TogNMINotifications(ddd.cache.GetValidatedGoStruct(crDeviceName), time.Now().UnixNano(), ygot.GNMINotificationsConfig{
+			UsePathElem: true,
+		})
+		if err != nil {
+			return err
 		}
-	}
+
+		for _, n := range ns {
+
+			//	for _, u := range n.GetUpdate() {
+			//		ddd.log.Debug("Update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
+			//	}
+
+			if err := ddd.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
+				//log.Debug("handle target update", "error", err, "Path", yparser.GnmiPath2XPath(u.GetPath(), true), "Value", u.GetVal())
+				//log.Debug("handle target update", "error", err, "Notification", *n)
+				return errors.New("cache update failed")
+			}
+		}
+	*/
 
 	return nil
 }

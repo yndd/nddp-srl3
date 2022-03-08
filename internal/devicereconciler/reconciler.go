@@ -30,9 +30,10 @@ import (
 
 	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/device"
+	"github.com/yndd/nddp-srl3/internal/shared"
 	deviceschema "github.com/yndd/nddp-srl3/pkg/yangschema"
-	systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
 	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
+	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc"
 )
 
@@ -185,21 +186,23 @@ func (r *reconciler) run() error {
 			} else {
 				if exhausted == 0 {
 					// get the list of MR
-					resourceList, err := r.getResourceList()
+					crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
+					crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+					resourceList, err := r.cache.GetSystemResourceList(crSystemDeviceName)
 					if err != nil {
 						return err
 					}
 					for _, resource := range resourceList {
 						switch resource.Status {
-						case systemv1alpha1.E_GvkStatus_Updatepending:
+						case ygotnddp.NddpSystem_ResourceStatus_UPDATEPENDING:
 							if err := r.reconcileUpdate(r.ctx, resource); err != nil {
 								log.Debug("reconciler error", "error", err)
 							}
-						case systemv1alpha1.E_GvkStatus_Deletepending:
+						case ygotnddp.NddpSystem_ResourceStatus_DELETEPENDING:
 							if err := r.reconcileDelete(r.ctx, resource); err != nil {
 								log.Debug("reconciler error", "error", err)
 							}
-						case systemv1alpha1.E_GvkStatus_Createpending:
+						case ygotnddp.NddpSystem_ResourceStatus_CREATEPENDING:
 							if err := r.reconcileCreate(r.ctx, resource); err != nil {
 								log.Debug("reconciler error", "error", err)
 							}

@@ -30,15 +30,11 @@ import (
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 )
 
-type adder interface {
-	Add(item interface{})
-}
-
 type observe struct {
 	hasData  bool
 	upToDate bool
-	//deletes []*gnmi.Path
-	//updates []*gnmi.Update
+	deletes  []*gnmi.Path
+	updates  []*gnmi.Update
 }
 
 // processObserve

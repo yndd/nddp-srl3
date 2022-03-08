@@ -18,14 +18,10 @@ package gnmiserver
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
-	"github.com/pkg/errors"
 	"github.com/yndd/ndd-yang/pkg/yparser"
-	"github.com/yndd/nddp-srl3/internal/shared"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -47,77 +43,60 @@ func (s *server) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.SetRespon
 
 	log := s.log.WithValues("numUpdates", numUpdates, "numReplaces", numReplaces, "numDeletes", numDeletes)
 	prefix := req.GetPrefix()
+	target := prefix.GetTarget()
 
-	transaction := false
 	if numReplaces > 0 {
 		log.Debug("Set Replace", "target", prefix.Target, "Path", yparser.GnmiPath2XPath(req.GetReplace()[0].GetPath(), true))
-		// check if the update is a transaction or not -> determines if the individual reconciler has to run
-		if req.GetReplace()[0].GetPath().GetElem()[0].GetName() == "transaction" {
-			transaction = true
-		}
-		// delete the cache first and after update it, since the gvk entry comes first
-		if err := s.DeleteCache(prefix, req.GetReplace()[0].GetPath()); err != nil {
+
+		// if the cache was deleted we can easily update without history
+
+		/* create option overrides the previous gvk
+		v, err := yparser.GetValue(req.GetReplace()[0].GetVal())
+		if err != nil {
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
-		// if the cache was deleted we can easily update without history
-		for _, u := range req.GetReplace() {
+
+		nddpGoStruct, err := s.cache.ValidateCreate(cacheName, v)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+		*/
+		nddpGoStruct, err := s.cache.ValidateUpdate(target, req.GetReplace(), true, false)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+
+		//log.Debug("Set Replace", "GoStruct", nddpGoStruct)
+		s.cache.UpdateValidatedGoStruct(target, nddpGoStruct)
+
+		/*
 			if err := s.UpdateCache(prefix, u); err != nil {
 				return nil, status.Errorf(codes.Internal, err.Error())
 			}
-			if u.GetPath().GetElem()[0].GetName() == "gvk" &&
-				(u.GetPath().GetElem()[0].GetKey()["name"] == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf1" ||
-					u.GetPath().GetElem()[0].GetKey()["name"] == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf2") {
+		*/
 
-				fmt.Printf("updateResourceStatus system-bgp %s\n", u.GetVal())
-			}
-			if u.GetPath().GetElem()[0].GetName() == "gvk" &&
-				(u.GetPath().GetElem()[0].GetKey()["name"] == "srl.nddp.yndd.io/v1alpha1/SrlNetworkinstanceProtocolsBgp/default/nokia.region1.infrastructure.infra.default-leaf1" ||
-					u.GetPath().GetElem()[0].GetKey()["name"] == "srl.nddp.yndd.io/v1alpha1/SrlNetworkinstanceProtocolsBgp/default/nokia.region1.infrastructure.infra.default-leaf2") {
-
-				fmt.Printf("updateResourceStatus protocol-bgp %s\n", u.GetVal())
-			}
-		}
 	}
 
 	if numUpdates > 0 {
 		log.Debug("Set Update", "target", prefix.Target, "Path", yparser.GnmiPath2XPath(req.GetUpdate()[0].GetPath(), true))
 		// check if the update is a transaction or not -> determines if the individual reconciler has to run
-		if req.GetUpdate()[0].GetPath().GetElem()[0].GetName() == "transaction" {
-			transaction = true
-		}
-
-		for _, u := range req.GetUpdate() {
-			if err := s.UpdateCache(prefix, u); err != nil {
-				return nil, status.Errorf(codes.Internal, err.Error())
-			}
-			if u.GetPath().GetElem()[0].GetName() == "gvk" &&
-				(u.GetPath().GetElem()[0].GetKey()["name"] == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf1" ||
-					u.GetPath().GetElem()[0].GetKey()["name"] == "srl.nddp.yndd.io/v1alpha1/SrlSystemNetworkinstanceProtocolsBgpvpn/default/nokia.region1.infrastructure.infra.leaf2") {
-
-				fmt.Printf("updateResourceStatus protocol-bgp %s\n", u.GetVal())
-			}
-		}
+		return nil, status.Errorf(codes.Unimplemented, "not implemented")
 	}
 
 	if numDeletes > 0 {
 		log.Debug("Set Delete", "target", prefix.Target, "Path", yparser.GnmiPath2XPath(req.GetDelete()[0], true))
 		// check if the update is a transaction or not -> determines if the individual reconciler has to run
-		if req.GetDelete()[0].GetElem()[0].GetName() == "transaction" {
-			transaction = true
-		}
-		for _, p := range req.GetDelete() {
-			if err := s.DeleteCache(prefix, p); err != nil {
-				return nil, status.Errorf(codes.InvalidArgument, err.Error())
-			}
-		}
+		return nil, status.Errorf(codes.Unimplemented, "not implemented")
 	}
 
-	// set the status in the cache to indicate there is work for the reconciler
-	// only if the
-	if !transaction {
+	/*
 		if err := s.setUpdateStatus(req); err != nil {
 			return nil, status.Errorf(codes.FailedPrecondition, err.Error())
 		}
+	*/
+
+	if err := s.cache.SetSystemCacheStatus(target, true); err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
 	return &gnmi.SetResponse{
@@ -128,6 +107,7 @@ func (s *server) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.SetRespon
 		}}, nil
 }
 
+/*
 func (s *server) UpdateCache(prefix *gnmi.Path, u *gnmi.Update) error {
 	//v, _ := yparser.GetValue(u.GetVal())
 	//s.log.Debug("UpdateCache", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal(), "type", reflect.TypeOf(v))
@@ -143,11 +123,6 @@ func (s *server) UpdateCache(prefix *gnmi.Path, u *gnmi.Update) error {
 	}
 	//s.log.Debug("UpdateCache", "notification", n)
 	if n != nil {
-		/*
-			for _, u := range n.GetUpdate() {
-				s.log.Debug("gnmiserver update cache", "notification path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
-			}
-		*/
 
 		if err := s.cache.GetCache().GnmiUpdate(prefix.GetTarget(), n); err != nil {
 			//log.Debug("GnmiUpdate Error", "Notification", n, "Error", err)
@@ -156,24 +131,26 @@ func (s *server) UpdateCache(prefix *gnmi.Path, u *gnmi.Update) error {
 	}
 	return nil
 }
+*/
 
+/*
 func (s *server) DeleteCache(prefix *gnmi.Path, p *gnmi.Path) error {
 	// delete from config cache
 	n, err := s.cache.GetCache().GetNotificationFromDelete(prefix, p)
 	if err != nil {
 		return err
 	}
-	/*
-		for _, d := range n.GetDelete() {
-			s.log.Debug("gnmiserver delete cache", "notification", yparser.GnmiPath2XPath(d, true))
-		}
-	*/
+
+	//	for _, d := range n.GetDelete() {
+	//		s.log.Debug("gnmiserver delete cache", "notification", yparser.GnmiPath2XPath(d, true))
+	//	}
 	if err := s.cache.GetCache().GnmiUpdate(prefix.GetTarget(), n); err != nil {
 		return err
 	}
 	return nil
 }
-
+*/
+/*
 func (s *server) setUpdateStatus(req *gnmi.SetRequest) error {
 	crDeviceName := req.GetPrefix().GetTarget()
 	//s.log.Debug("setUpdateStatus", "cacheName", crDeviceName)
@@ -205,7 +182,9 @@ func (s *server) setUpdateStatus(req *gnmi.SetRequest) error {
 
 	return nil
 }
+*/
 
+/*
 func (s *server) hasKey(prefix *gnmi.Path, u *gnmi.Update) (bool, error) {
 	// update is for the system cache
 	crDeviceName := prefix.GetTarget()
@@ -226,3 +205,4 @@ func (s *server) hasKey(prefix *gnmi.Path, u *gnmi.Update) (bool, error) {
 	}
 	return false, nil
 }
+*/

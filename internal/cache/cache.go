@@ -16,21 +16,36 @@ import (
 	yangcache "github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/nddp-srl3/internal/model"
+	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type Cache interface {
-	HasTarget(crDeviceName string) bool
-	GetValidatedGoStruct(crDeviceName string) ygot.ValidatedGoStruct
-	UpdateValidatedGoStruct(crDeviceName string, s ygot.ValidatedGoStruct)
+	HasTarget(target string) bool
+	GetValidatedGoStruct(target string) ygot.ValidatedGoStruct
+	UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct)
 	GetCache() *yangcache.Cache
-	SetModel(crDeviceName string, m *model.Model)
-	GetModel(crDeviceName string) *model.Model
+	SetModel(target string, m *model.Model)
+	GetModel(target string) *model.Model
 
-	ValidateCreate(crDeviceName string, x interface{}) (ygot.ValidatedGoStruct, error)
-	ValidateUpdate(crDeviceName string, updates []*gnmi.Update) (ygot.ValidatedGoStruct, error)
-	ValidateDelete(crDeviceName string, paths []*gnmi.Path) (ygot.ValidatedGoStruct, error)
+	// data manipulation methods
+	ValidateCreate(target string, x interface{}) (ygot.ValidatedGoStruct, error)
+	ValidateUpdate(target string, updates []*gnmi.Update, replace, jsonietf bool) (ygot.ValidatedGoStruct, error)
+	ValidateDelete(target string, paths []*gnmi.Path) (ygot.ValidatedGoStruct, error)
+
+	// system cache methods
+	GetSystemExhausted(target string) (*uint32, error)
+	SetSystemCacheStatus(target string, status bool) error
+	GetSystemResourceList(target string) (map[string]*ygotnddp.NddpSystem_Gvk, error)
+	GetSystemResource(target, gvkName string) (*ygotnddp.NddpSystem_Gvk, error)
+	UpdateSystemResourceStatus(target, resourceName, reason string, status ygotnddp.E_NddpSystem_ResourceStatus) error
+	DeleteSystemResource(target, resourceName string) error
+
+	// observe methods
+	//FindPaths(target string, x interface{}) ([]*gnmi.Path, error)
+	//GetGoStructFromPath(target string, rootPath *gnmi.Path, x interface{}) (ygot.ValidatedGoStruct, error)
+	//RemoveNonDefaultDataFromPath(target string, rootPath *gnmi.Path, x interface{}) (interface{}, error)
 }
 
 type cache struct {
@@ -48,61 +63,77 @@ func New() Cache {
 	}
 }
 
-func (c *cache) HasTarget(crDeviceName string) bool {
-	if _, ok := c.validated[crDeviceName]; ok {
+func (c *cache) HasTarget(target string) bool {
+	if _, ok := c.validated[target]; ok {
 		return true
 	}
 	return false
 }
 
-func (c *cache) GetValidatedGoStruct(crDeviceName string) ygot.ValidatedGoStruct {
+func (c *cache) GetValidatedGoStruct(target string) ygot.ValidatedGoStruct {
 	defer c.m.Unlock()
 	c.m.Lock()
-	if s, ok := c.validated[crDeviceName]; ok {
+	if s, ok := c.validated[target]; ok {
+		if s == nil {
+			fmt.Println("GetValidatedGoStruct is nil")
+		}
 		return s
 	}
 	return nil
 }
 
-func (c *cache) UpdateValidatedGoStruct(crDeviceName string, s ygot.ValidatedGoStruct) {
+func (c *cache) UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct) {
 	defer c.m.Unlock()
 	c.m.Lock()
-	c.validated[crDeviceName] = s
+	c.validated[target] = s
 
-	//fmt.Printf("UpdateValidatedGoStruct, deviceName: %s, goStruct: %v\n", crDeviceName, s)
+	if s == nil {
+		fmt.Printf("UpdateValidatedGoStruct, deviceName: %s, goStruct: %v\n", target, s)
+	}
+
 }
 
 func (c *cache) GetCache() *yangcache.Cache {
 	return c.c
 }
 
-func (c *cache) SetModel(crDeviceName string, m *model.Model) {
+func (c *cache) SetModel(target string, m *model.Model) {
 	defer c.m.Unlock()
 	c.m.Lock()
-	c.model[crDeviceName] = m
+	c.model[target] = m
 }
 
-func (c *cache) GetModel(crDeviceName string) *model.Model {
+func (c *cache) GetModel(target string) *model.Model {
 	defer c.m.Unlock()
 	c.m.Lock()
-	if m, ok := c.model[crDeviceName]; ok {
+	if m, ok := c.model[target]; ok {
 		return m
 	}
 	return nil
 }
 
-func (c *cache) ValidateCreate(crDeviceName string, x interface{}) (ygot.ValidatedGoStruct, error) {
-	m := c.GetModel(crDeviceName)
+func (c *cache) ValidateCreate(target string, x interface{}) (ygot.ValidatedGoStruct, error) {
+	m := c.GetModel(target)
 
-	curGoStruct, err := ygot.DeepCopy(c.GetValidatedGoStruct(crDeviceName))
-	if err != nil {
-		return nil, err
+	var curGoStruct ygot.GoStruct
+	g := c.GetValidatedGoStruct(target)
+	if g == nil {
+		curGoStruct = g
+	} else {
+		var err error
+		curGoStruct, err = ygot.DeepCopy(g)
+		if err != nil {
+			return nil, err
+		}
 	}
 
+	fmt.Printf("ValidateCreate target: %s data: %v\n", target, x)
 	newConfig, err := json.Marshal(x)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println(string(newConfig))
 
 	newGoStruct, err := m.NewConfigStruct(newConfig, true)
 	if err != nil {
@@ -120,33 +151,99 @@ func (c *cache) ValidateCreate(crDeviceName string, x interface{}) (ygot.Validat
 	return newGoStruct, nil
 }
 
-func (c *cache) ValidateUpdate(crDeviceName string, updates []*gnmi.Update) (ygot.ValidatedGoStruct, error) {
-	//fmt.Printf("ValidateUpdate deviceName: %s, goStruct: %v\n", crDeviceName, c.GetValidatedGoStruct(crDeviceName))
-	jsonTree, err := ygot.ConstructIETFJSON(c.GetValidatedGoStruct(crDeviceName), &ygot.RFC7951JSONConfig{})
+func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, jsonietf bool) (ygot.ValidatedGoStruct, error) {
+	var curGoStruct ygot.GoStruct
+	g := c.GetValidatedGoStruct(target)
+	if g == nil {
+		curGoStruct = g
+	} else {
+		var err error
+		curGoStruct, err = ygot.DeepCopy(g)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if curGoStruct == nil {
+		return nil, errors.New("ValidateUpdate using empty go struct")
+	}
+	//fmt.Printf("ValidateUpdate deviceName: %s, goStruct: %v\n", target, curGoStruct)
+	jsonTree, err := ygot.ConstructIETFJSON(curGoStruct, &ygot.RFC7951JSONConfig{})
 	if err != nil {
 		return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct")
 	}
 
-	curGoStruct := c.GetValidatedGoStruct(crDeviceName)
-	m := c.GetModel(crDeviceName)
-	schema := m.SchemaTreeRoot
+	m := c.GetModel(target)
 
-	//fmt.Printf("ValidateUpdate deviceName: %s, curGoStruct: %v\n", crDeviceName, c.GetValidatedGoStruct(crDeviceName))
+	//fmt.Printf("ValidateUpdate deviceName: %s, curGoStruct: %v\n", target, curGoStruct)
+	//fmt.Printf("ValidateUpdate deviceName: %s, jsonTree: %v\n", target, jsonTree)
 
 	var goStruct ygot.ValidatedGoStruct
 	for _, u := range updates {
 		fullPath := cleanPath(u.GetPath())
 		val := u.GetVal()
+		/*
+			fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
+			if replace {
+				fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
+			}
+		*/
+
+		// we need to return to the schema root for the next update
+		schema := m.SchemaTreeRoot
 
 		// Validate the operation
-		emptyNode, _, err := ytypes.GetOrCreateNode(schema, curGoStruct, fullPath)
-		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("path %v is not found in the config structure", fullPath))
+		var emptyNode interface{}
+		if replace {
+			//fmt.Printf("ValidateUpdate val: %v\n", val)
+			// in case of delete we first delete the node and recreate it again
+			if err := ytypes.DeleteNode(schema, curGoStruct, fullPath); err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("path %v cannot delete path", fullPath))
+			}
+			emptyNode, _, err = ytypes.GetOrCreateNode(schema, curGoStruct, fullPath)
+			if err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("path %v is not found in the config structure", fullPath))
+			}
+		} else {
+			emptyNode, _, err = ytypes.GetOrCreateNode(schema, curGoStruct, fullPath)
+			if err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("path %v is not found in the config structure", fullPath))
+			}
 		}
+
+		/*
+			if replace ||
+				yparser.GnmiPath2XPath(fullPath, true) == "/interface[name=ethernet-1/49]/subinterface[index=1]/ipv4/address[ip-prefix=100.64.0.0/31]" {
+				nodeStruct, _ := emptyNode.(ygot.ValidatedGoStruct)
+				vvvv, err := ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{})
+				if err != nil {
+					return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct:")
+				}
+				fmt.Printf("ValidateUpdate vvvv: %v\n", vvvv)
+				fmt.Printf("ValidateUpdate nodeStruct: %v\n", nodeStruct)
+			}
+		*/
 		var nodeVal interface{}
 		nodeStruct, ok := emptyNode.(ygot.ValidatedGoStruct)
 		if ok {
-			if err := m.JsonUnmarshaler(val.GetJsonIetfVal(), nodeStruct); err != nil {
+			v := val.GetJsonVal()
+			if jsonietf {
+				v = val.GetJsonIetfVal()
+			}
+			/*
+				if replace {
+					fmt.Printf("ValidateUpdate ok nodeStruct: %v\n", nodeStruct)
+				}
+			*/
+
+			if err := m.JsonUnmarshaler(v, nodeStruct); err != nil {
+				fmt.Printf("unmarshal error: nodeStruct: %v\n", nodeStruct)
+				fmt.Printf("unmarshal error: path: %s, val: %v\n", fullPath, v)
+				vvvv, err := ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{})
+				if err != nil {
+					return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct:")
+				}
+				fmt.Printf("ValidateUpdate vvvv: %v\n", vvvv)
 				return nil, errors.Wrap(err, "unmarshaling json data to config struct fails")
 			}
 			if err := nodeStruct.Validate(); err != nil {
@@ -156,40 +253,83 @@ func (c *cache) ValidateUpdate(crDeviceName string, updates []*gnmi.Update) (ygo
 			if nodeVal, err = ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{}); err != nil {
 				return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct:")
 			}
+			if replace {
+				fmt.Printf("ValidateUpdate ok nodeVal 1: %v\n", nodeVal)
+				/*
+					if err := json.Unmarshal(v, &nodeVal); err != nil {
+						return nil, errors.Wrap(err, "unmarshaling json data failed")
+					}
+					fmt.Printf("ValidateUpdate ok nodeVal 2: %v\n", nodeVal)
+				*/
+			}
 		} else {
+			/*
+				if replace {
+					fmt.Printf("ValidateUpdate nok nodeStruct: %v\n", nodeStruct)
+				}
+			*/
 			var err error
 			if nodeVal, err = value.ToScalar(val); err != nil {
 				return nil, errors.Wrap(err, "cannot convert leaf node to scalar type")
 			}
+			/*
+				if replace {
+					fmt.Printf("ValidateUpdate nok nodeVal: %v\n", nodeVal)
+				}
+			*/
 		}
+		// replace or update
+		op := gnmi.UpdateResult_UPDATE
+		if replace {
+			op = gnmi.UpdateResult_REPLACE
+		}
+		/*
+			if op == gnmi.UpdateResult_REPLACE {
+				fmt.Printf("ValidateUpdate nodeVal: %v\n", nodeVal)
+			}
+		*/
 
 		// Update json tree of the device config.
 		var curNode interface{} = jsonTree
-		schema := m.SchemaTreeRoot
+		schema = m.SchemaTreeRoot
 		for i, elem := range fullPath.GetElem() {
 			switch node := curNode.(type) {
 			case map[string]interface{}:
 				// Set node value.
 				if i == len(fullPath.GetElem())-1 {
-					//c.log.Debug("getChildNode last elem", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "node", node)
-					if elem.GetKey() == nil {
+					/*
+						if op == gnmi.UpdateResult_REPLACE {
+							fmt.Printf("ValidateUpdate: getChildNode last elem, path: %s, index: %d, elem: %v, node: %v, nodeVal: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, node, nodeVal)
+						}
+					*/
+
+					if len(elem.GetKey()) == 0 {
 						// err is grpcstatus error
-						if err := setPathWithoutAttribute(gnmi.UpdateResult_UPDATE, node, elem, nodeVal); err != nil {
+						if err := setPathWithoutAttribute(op, node, elem, nodeVal); err != nil {
+							// TODO need to add defaults
+							return nil, err
+						}
+						// set defaults
+						if err := setDefaults(node, schema); err != nil {
 							return nil, err
 						}
 						break
 					}
 					// err is grpcstatus error
-					if err := setPathWithAttribute(gnmi.UpdateResult_UPDATE, node, elem, nodeVal); err != nil {
+					if err := setPathWithAttribute(op, node, elem, nodeVal); err != nil {
+						return nil, err
+					}
+					// set defaults
+					if err := setDefaults(node, schema); err != nil {
 						return nil, err
 					}
 					break
 				}
-				//c.log.Debug("getChildNode before", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "node", node)
+				//fmt.Printf("ValidateUpdate: getChildNode before: %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, node)
 				if curNode, schema = getChildNode(node, schema, elem, true); curNode == nil {
 					return nil, errors.Wrap(err, fmt.Sprintf("path elem not found: %v", elem))
 				}
-				//c.log.Debug("getChildNode after", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "newNode", curNode)
+				//fmt.Printf("ValidateUpdate: getChildNode after : %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
 			case []interface{}:
 				return nil, errors.Wrap(err, fmt.Sprintf("incompatible path elem: %v", elem))
 			default:
@@ -208,19 +348,38 @@ func (c *cache) ValidateUpdate(crDeviceName string, updates []*gnmi.Update) (ygo
 	return goStruct, nil
 }
 
-func (c *cache) ValidateDelete(crDeviceName string, paths []*gnmi.Path) (ygot.ValidatedGoStruct, error) {
-	jsonTree, err := ygot.ConstructIETFJSON(c.GetValidatedGoStruct(crDeviceName), &ygot.RFC7951JSONConfig{})
+func (c *cache) ValidateDelete(target string, paths []*gnmi.Path) (ygot.ValidatedGoStruct, error) {
+	var curGoStruct ygot.GoStruct
+	g := c.GetValidatedGoStruct(target)
+	if g == nil {
+		curGoStruct = g
+	} else {
+		var err error
+		curGoStruct, err = ygot.DeepCopy(g)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if curGoStruct == nil {
+		return nil, errors.New("ValidateDelete using empty go struct")
+	}
+
+	jsonTree, err := ygot.ConstructIETFJSON(curGoStruct, &ygot.RFC7951JSONConfig{})
 	if err != nil {
 		return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct")
 	}
-	m := c.GetModel(crDeviceName)
-	schema := m.SchemaTreeRoot
+	m := c.GetModel(target)
 
 	var goStruct ygot.ValidatedGoStruct
 	for _, path := range paths {
 		var curNode interface{} = jsonTree
 		pathDeleted := false
 		fullPath := cleanPath(path)
+		fmt.Printf("ValidateDelete path: %s\n", yparser.GnmiPath2XPath(fullPath, true))
+
+		// we need to go back to the schemaroot for the next delete path
+		schema := m.SchemaTreeRoot
 
 		for i, elem := range fullPath.GetElem() { // Delete sub-tree or leaf node.
 			node, ok := curNode.(map[string]interface{})
@@ -232,6 +391,7 @@ func (c *cache) ValidateDelete(crDeviceName string, paths []*gnmi.Path) (ygot.Va
 			// Delete node
 			if i == len(fullPath.GetElem())-1 {
 				//c.log.Debug("getChildNode last elem", "path", yparser.GnmiPath2XPath(fullPath, true), "elem", elem, "node", node)
+				//fmt.Printf("ValidateDelete last elem, path: %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, node)
 				if len(elem.GetKey()) == 0 {
 					// check schema for defaults and fallback to default if required
 					if schema, ok = schema.Dir[elem.GetName()]; ok {
@@ -251,9 +411,11 @@ func (c *cache) ValidateDelete(crDeviceName string, paths []*gnmi.Path) (ygot.Va
 				pathDeleted = deleteKeyedListEntry(node, elem)
 				break
 			}
+			//fmt.Printf("ValidateDelete: getChildNode before: %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, node)
 			if curNode, schema = getChildNode(node, schema, elem, false); curNode == nil {
 				break
 			}
+			//fmt.Printf("ValidateDelete: getChildNode after: %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
 		}
 
 		// Validate the new config
@@ -293,10 +455,12 @@ func cleanPath(path *gnmi.Path) *gnmi.Path {
 // IETF config tree, where the child node is indexed by pathElem without
 // attribute. The function returns grpc status error if unsuccessful.
 func setPathWithoutAttribute(op gnmi.UpdateResult_Operation, curNode map[string]interface{}, pathElem *gnmi.PathElem, nodeVal interface{}) error {
+	//fmt.Printf("ValidateUpdate: setPathWithoutAttribute, operation: %v, elem: %v, node: %v, nodeVal: %v\n", op, pathElem, curNode, nodeVal)
 	target, hasElem := curNode[pathElem.Name]
 	nodeValAsTree, nodeValIsTree := nodeVal.(map[string]interface{})
 	if op == gnmi.UpdateResult_REPLACE || !hasElem || !nodeValIsTree {
 		curNode[pathElem.Name] = nodeVal
+		//fmt.Printf("ValidateUpdate: curNode: %v\n", curNode)
 		return nil
 	}
 	targetAsTree, ok := target.(map[string]interface{})
@@ -313,6 +477,7 @@ func setPathWithoutAttribute(op gnmi.UpdateResult_Operation, curNode map[string]
 // JSON config tree, where the child node is indexed by pathElem with attribute.
 // The function returns grpc status error if unsuccessful.
 func setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]interface{}, pathElem *gnmi.PathElem, nodeVal interface{}) error {
+	//fmt.Printf("ValidateUpdate: setPathWithAttribute, operation: %v, elem: %v, node: %v, nodeVal: %v\n", op, pathElem, curNode, nodeVal)
 	nodeValAsTree, ok := nodeVal.(map[string]interface{})
 	if !ok {
 		return status.Errorf(codes.InvalidArgument, "expect nodeVal is a json node of map[string]interface{}, received %T", nodeVal)
@@ -323,9 +488,15 @@ func setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]int
 	}
 	if op == gnmi.UpdateResult_REPLACE {
 		for k := range m {
+			fmt.Printf("ValidateUpdate: setPathWithAttribute 1: k: %v, m: %v\n", k, m)
 			delete(m, k)
 		}
 	}
+	// Debug to be removed below
+	if op == gnmi.UpdateResult_REPLACE {
+		fmt.Printf("ValidateUpdate: setPathWithAttribute 2: m: %v\n", m)
+	}
+	// Debug to be removed above
 	for attrKey, attrVal := range pathElem.GetKey() {
 		m[attrKey] = attrVal
 		if asNum, err := strconv.ParseFloat(attrVal, 64); err == nil {
@@ -336,10 +507,26 @@ func setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]int
 				return status.Errorf(codes.InvalidArgument, "invalid config data: %v is a path attribute", k)
 			}
 		}
+		// Debug to be removed below
+		if op == gnmi.UpdateResult_REPLACE {
+			fmt.Printf("ValidateUpdate: setPathWithAttribute 3: m: %v\n", m)
+		}
+		// Debug to be removed above
 	}
 	for k, v := range nodeValAsTree {
 		m[k] = v
+		// Debug to be removed below
+		if op == gnmi.UpdateResult_REPLACE {
+			fmt.Printf("ValidateUpdate: setPathWithAttribute 4: k: %v, v: %v\n", k, v)
+		}
+		// Debug to be removed above
 	}
+	// Debug to be removed below
+	if op == gnmi.UpdateResult_REPLACE {
+		fmt.Printf("ValidateUpdate: setPathWithAttribute 5: m: %v\n", m)
+		fmt.Printf("ValidateUpdate: setPathWithAttribute 5: curNode: %v\n", curNode)
+	}
+	// Debug to be removed above
 	return nil
 }
 
@@ -405,7 +592,7 @@ func getChildNode(node map[string]interface{}, schema *yang.Entry, elem *gnmi.Pa
 	var nextNode interface{}
 	if len(elem.GetKey()) == 0 {
 		//c.log.Debug("getChildNode container", "elem name", elem.GetName(), "elem key", elem.GetKey())
-		if nextNode, ok = node[elem.GetName()]; ok {
+		if nextNode, ok = node[elem.GetName()]; !ok {
 			//c.log.Debug("getChildNode new container entry", "elem name", elem.GetName(), "elem key", elem.GetKey())
 			if createIfNotExist {
 				node[elem.Name] = make(map[string]interface{})
@@ -490,4 +677,161 @@ func getKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem, createI
 	}
 	node[elem.GetName()] = append(keyedList, m)
 	return m
+}
+
+func setDefaults(node map[string]interface{}, schema *yang.Entry) error {
+	// check schema for defaults and fallback to default if required
+	var nodeVal interface{}
+	var err error
+	for elem, schema := range schema.Dir {
+		if len(schema.Default) > 0 {
+			//fmt.Printf("ValidateUpdate: default elem: %s, val: %v, type: %s\n", elem, schema.Default, schema.Type.Kind.String())
+			nodeVal = schema.Default[0]
+			switch schema.Type.Kind.String() {
+			case "boolean":
+				nodeVal, err = strconv.ParseBool(schema.Default[0])
+				if err != nil {
+					return err
+				}
+			case "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64":
+				d, err := strconv.Atoi(schema.Default[0])
+				if err != nil {
+					return err
+				}
+				switch schema.Type.Kind.String() {
+				case "uint8":
+					nodeVal = uint8(d)
+				case "uint16":
+					nodeVal = uint16(d)
+				case "uint32":
+					nodeVal = uint32(d)
+				case "uint64":
+					nodeVal = uint64(d)
+				case "int8":
+					nodeVal = int8(d)
+				case "int16":
+					nodeVal = int16(d)
+				case "int32":
+					nodeVal = int32(d)
+				case "int64":
+					nodeVal = int64(d)
+				}
+			}
+			if err := setPathWithoutAttribute(gnmi.UpdateResult_UPDATE, node, &gnmi.PathElem{Name: elem}, nodeVal); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (c *cache) GetSystemExhausted(target string) (*uint32, error) {
+	defer c.m.Unlock()
+	c.m.Lock()
+	goStruct, ok := c.validated[target]
+	if !ok {
+		return nil, errors.New("target not ready")
+	}
+
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return nil, errors.New("wrong object nddp")
+	}
+	return nddpDevice.Cache.Exhausted, nil
+}
+
+func (c *cache) SetSystemCacheStatus(target string, status bool) error {
+	defer c.m.Unlock()
+	c.m.Lock()
+	goStruct, ok := c.validated[target]
+	if !ok {
+		return errors.New("target not ready")
+	}
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return errors.New("wrong object nddp")
+	}
+	nddpDevice.GetOrCreateCache().Update = ygot.Bool(status)
+
+	c.validated[target] = nddpDevice
+	return nil
+
+}
+
+func (c *cache) GetSystemResourceList(target string) (map[string]*ygotnddp.NddpSystem_Gvk, error) {
+	defer c.m.Unlock()
+	c.m.Lock()
+	goStruct, ok := c.validated[target]
+	if !ok {
+		return nil, errors.New("target not ready")
+	}
+
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return nil, errors.New("wrong object nddp")
+	}
+	return nddpDevice.Gvk, nil
+}
+
+func (c *cache) GetSystemResource(target, resourceName string) (*ygotnddp.NddpSystem_Gvk, error) {
+	defer c.m.Unlock()
+	c.m.Lock()
+	goStruct, ok := c.validated[target]
+	if !ok {
+		return nil, errors.New("target not ready")
+	}
+
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return nil, errors.New("wrong object nddp")
+	}
+	r, ok := nddpDevice.Gvk[resourceName]
+	if !ok {
+		errors.New("resource not found")
+	}
+
+	return r, nil
+}
+
+func (c *cache) UpdateSystemResourceStatus(target, resourceName, reason string, status ygotnddp.E_NddpSystem_ResourceStatus) error {
+	defer c.m.Unlock()
+	c.m.Lock()
+	goStruct, ok := c.validated[target]
+	if !ok {
+		return errors.New("target not ready")
+	}
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return errors.New("wrong object nddp")
+	}
+
+	fmt.Printf("UpdateSystemresourceStatus, target: %s, resourceName: %s, resource: %v\n", target, resourceName, nddpDevice)
+
+	r, ok := nddpDevice.Gvk[resourceName]
+	if !ok {
+		errors.New("resource not found")
+	}
+	fmt.Printf("UpdateSystemresourceStatus, target: %s, resourceName: %s, resource: %v\n", target, resourceName, r)
+	r.Status = status
+	r.Reason = ygot.String(reason)
+
+	c.validated[target] = nddpDevice
+	return nil
+}
+
+func (c *cache) DeleteSystemResource(target, resourceName string) error {
+	defer c.m.Unlock()
+	c.m.Lock()
+	goStruct, ok := c.validated[target]
+	if !ok {
+		return errors.New("target not ready")
+	}
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return errors.New("wrong object nddp")
+	}
+	nddpDevice.DeleteGvk(resourceName)
+
+	c.validated[target] = nddpDevice
+	return nil
 }

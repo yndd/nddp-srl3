@@ -13,6 +13,7 @@ import (
 	"github.com/yndd/nddp-srl3/internal/shared"
 	systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
+	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,10 +51,16 @@ func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 			return errors.New("target cache does not exist")
 		}
 
-		resourceList, err := c.getResourceList(crDeviceName)
+		resourceList, err := c.cache.GetSystemResourceList(shared.GetCrSystemDeviceName(crDeviceName))
 		if err != nil {
 			return err
 		}
+		/*
+			resourceList, err := c.getResourceList(crDeviceName)
+			if err != nil {
+				return err
+			}
+		*/
 		//log.Debug("resourceList", "list", resourceList)
 
 		// handle deletes
@@ -72,7 +79,7 @@ func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 	return nil
 }
 
-func (c *collector) handleDeletes(crDeviceName string, resourceList []*systemv1alpha1.Gvk, delPaths []*gnmi.Path) error {
+func (c *collector) handleDeletes(crDeviceName string, resourceList map[string]*ygotnddp.NddpSystem_Gvk, delPaths []*gnmi.Path) error {
 	if len(delPaths) > 0 {
 		/*
 			for _, p := range delPaths {
@@ -84,11 +91,16 @@ func (c *collector) handleDeletes(crDeviceName string, resourceList []*systemv1a
 		if err != nil {
 			return err
 		}
+		if goStruct == nil {
+			//c.log.Debug("handleDeletes UpdateValidatedGoStruct", "deviceName", crDeviceName, "goStruct", goStruct, "delPaths", delPaths)
+			return errors.New("subscription handler handleDeletes suicide empty goStruct")
+		}
 		// update the config with the new struct
-		c.log.Debug("UpdateValidatedGoStruct", "goStruct", goStruct, "delPaths", delPaths)
+		//c.log.Debug("UpdateValidatedGoStruct", "goStruct", goStruct, "delPaths", delPaths)
 		c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
 
-		// trigger reconcile event
+		// trigger reconcile event, but group them to avoid multiple reconciliation triggers
+		resourceNames := map[string]string{}
 		for _, path := range delPaths {
 			xpath := yparser.GnmiPath2XPath(path, true)
 			resourceName, err := c.findManagedResource(xpath, resourceList)
@@ -97,15 +109,17 @@ func (c *collector) handleDeletes(crDeviceName string, resourceList []*systemv1a
 			}
 
 			if *resourceName != unmanagedResource {
-				// TODO Trigger reconcile event
-				c.triggerReconcileEvent(resourceName)
+				resourceNames[*resourceName] = ""
 			}
+		}
+		for resourceName := range resourceNames {
+			c.triggerReconcileEvent(resourceName)
 		}
 	}
 	return nil
 }
 
-func (c *collector) handleUpdates(crDeviceName string, resourceList []*systemv1alpha1.Gvk, updates []*gnmi.Update) error {
+func (c *collector) handleUpdates(crDeviceName string, resourceList map[string]*ygotnddp.NddpSystem_Gvk, updates []*gnmi.Update) error {
 	if len(updates) > 0 {
 		/*
 			for _, u := range updates {
@@ -114,15 +128,20 @@ func (c *collector) handleUpdates(crDeviceName string, resourceList []*systemv1a
 		*/
 
 		// validate updates
-		goStruct, err := c.cache.ValidateUpdate(crDeviceName, updates)
+		goStruct, err := c.cache.ValidateUpdate(crDeviceName, updates, false, true)
 		if err != nil {
 			return err
 		}
 		// update the config with the new struct
-		c.log.Debug("UpdateValidatedGoStruct", "deviceName", crDeviceName, "goStruct", goStruct, "updates", updates)
-		//c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
+		if goStruct == nil {
+			//c.log.Debug("handleUpdates UpdateValidatedGoStruct", "deviceName", crDeviceName, "goStruct", goStruct, "updates", updates)
+			return errors.New("subscription handler handleUpdates suicide empty goStruct")
+		}
+
+		c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
 
 		// check of we need to trigger a reconcile event
+		resourceNames := map[string]string{}
 		for _, u := range updates {
 			xpath := yparser.GnmiPath2XPath(u.GetPath(), true)
 			// check if this is a managed resource or unmanged resource
@@ -132,12 +151,11 @@ func (c *collector) handleUpdates(crDeviceName string, resourceList []*systemv1a
 				return err
 			}
 			if *resourceName != unmanagedResource {
-				c.triggerReconcileEvent(resourceName)
+				resourceNames[*resourceName] = ""
 			}
 
 			/*
 				walkInternalGoStruct := true
-
 				if !walkInternalGoStruct {
 					// we create a json blob and merge this in the gostruct
 					fullPath := u.GetPath()
@@ -149,21 +167,18 @@ func (c *collector) handleUpdates(crDeviceName string, resourceList []*systemv1a
 					}
 					c.log.Debug("subscription config update", "path", yparser.GnmiPath2XPath(fullPath, true), "val", val)
 					//c.log.Debug("subscription config update", "path", yparser.GnmiPath2XPath(fullPath, true), "json", string(json))
-
 					// create newGostruct which will not be validated
 					newGoStruct, err := m.NewConfigStruct(json, false)
 					if err != nil {
 						c.log.Debug("generate new gostruct", "err", err)
 						return err
 					}
-
 					// merge the newGostruct with the current config
 					currGoStruct := c.cache.GetValidatedGoStruct(crDeviceName)
 					if err := ygot.MergeStructInto(currGoStruct, newGoStruct); err != nil {
 						c.log.Debug("merge  gostructs", "err", err)
 						return err
 					}
-
 					// validate the merged config
 					if err := currGoStruct.Validate(); err != nil {
 						c.log.Debug("validate new gostructs", "error", err)
@@ -174,24 +189,26 @@ func (c *collector) handleUpdates(crDeviceName string, resourceList []*systemv1a
 				}
 				}*/
 		}
+		for resourceName := range resourceNames {
+			c.triggerReconcileEvent(resourceName)
+		}
 	}
 	return nil
 }
 
-func (c *collector) findManagedResource(xpath string, resourceList []*systemv1alpha1.Gvk) (*string, error) {
+func (c *collector) findManagedResource(xpath string, resourceList map[string]*ygotnddp.NddpSystem_Gvk) (*string, error) {
 	matchedResourceName := unmanagedResource
 	matchedResourcePath := ""
-	for _, r := range resourceList {
-		for _, path := range r.Paths {
+	for resourceName, r := range resourceList {
+		for _, path := range r.Path {
 			if strings.Contains(xpath, path) {
 				// if there is a better match we use the better match
 				if len(path) > len(matchedResourcePath) {
 					matchedResourcePath = path
-					matchedResourceName = r.Name
+					matchedResourceName = resourceName
 				}
 			}
 		}
-
 	}
 	return &matchedResourceName, nil
 }
@@ -210,9 +227,9 @@ func (c *collector) getResourceList(crDeviceName string) ([]*systemv1alpha1.Gvk,
 	return gvkresource.GetResourceList(rl)
 }
 
-func (c *collector) triggerReconcileEvent(resourceName *string) error {
+func (c *collector) triggerReconcileEvent(resourceName string) error {
 
-	gvk, err := gvkresource.String2Gvk(*resourceName)
+	gvk, err := gvkresource.String2Gvk(resourceName)
 	if err != nil {
 		return err
 	}

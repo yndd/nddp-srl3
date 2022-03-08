@@ -22,20 +22,26 @@ import (
 	"github.com/google/gnxi/utils/xpath"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/ygot/ygot"
-	systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
+	"github.com/yndd/ndd-yang/pkg/yparser"
+	"github.com/yndd/nddp-srl3/internal/shared"
+	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func (r *reconciler) reconcileCreate(ctx context.Context, resource *systemv1alpha1.Gvk) error {
+func (r *reconciler) reconcileCreate(ctx context.Context, resource *ygotnddp.NddpSystem_Gvk) error {
 	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address)
-	log.Debug("reconciling device config create")
+	log.Debug("reconciling device config create", "resourceName", *resource.Name)
+
+	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
 	// validateResource, merges the latest device config with the new config
 	// and validates it against the device Yang schema
+	log.Debug("reconcileCreate", "resource", *resource)
 	newGoStruct, err := r.validateCreate(resource)
 	if err != nil {
-		log.Debug("validation failed", "errpr", err)
+		log.Debug("validation failed", "error", err)
 	}
 	j, err := ygot.EmitJSON(newGoStruct, &ygot.EmitJSONConfig{
 		Format: ygot.RFC7951,
@@ -65,37 +71,74 @@ func (r *reconciler) reconcileCreate(ctx context.Context, resource *systemv1alph
 			}
 		}
 		// update failed, update resource status in the system cache
-		if err := r.updateResourceStatus(resource.Name, systemv1alpha1.E_GvkStatus_Failed); err != nil {
+		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
 			return err
 		}
 		return err
 	}
 	// update succeeded, update resource status in the system cache
-	if err := r.updateResourceStatus(resource.Name, systemv1alpha1.E_GvkStatus_Success); err != nil {
+	if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, "", ygotnddp.NddpSystem_ResourceStatus_SUCCESS); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *reconciler) reconcileUpdate(ctx context.Context, resource *systemv1alpha1.Gvk) error {
+func (r *reconciler) reconcileUpdate(ctx context.Context, resource *ygotnddp.NddpSystem_Gvk) error {
 	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address)
 	log.Debug("reconciling device config update")
 
-	// check deletes, updates
-	// TBD HOW DO WE DO THE DIFF
-	/*
-		deletes, updates, err := r.processUpdates(resource)
+	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+
+	// delete and update come from the resource
+	deletes := []*gnmi.Path{}
+	for _, path := range resource.Delete {
+		p, err := xpath.ToGNMIPath(path)
 		if err != nil {
 			return err
 		}
-	*/
-	deletes := []*gnmi.Path{}
+		deletes = append(deletes, p)
+	}
 	updates := []*gnmi.Update{}
+	for _, u := range resource.Update {
+		p, err := xpath.ToGNMIPath(*u.Path)
+		if err != nil {
+			return err
+		}
+		updates = append(updates, &gnmi.Update{
+			Path: p,
+			Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonIetfVal{JsonIetfVal: []byte(*u.Val)}},
+		})
+	}
+
+	/*
+		ns, err := r.processUpdate(resource)
+		if err != nil {
+			return err
+		}
+		deletes := []*gnmi.Path{}
+		updates := []*gnmi.Update{}
+		for _, n := range ns {
+			if len(n.GetUpdate()) > 0 {
+				updates = append(updates, n.GetUpdate()...)
+			}
+			if len(n.GetDelete()) > 0 {
+				deletes = append(deletes, n.GetDelete()...)
+			}
+		}
+	*/
+
+	for _, path := range deletes {
+		log.Debug("reconciling device config update -> delete paths", "path", yparser.GnmiPath2XPath(path, true))
+	}
+	for _, u := range updates {
+		log.Debug("reconciling device config update -> update info ", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
+	}
 
 	if err := r.validateDelete(deletes); err != nil {
 		return err
 	}
-	if err := r.validateUpdate(updates); err != nil {
+	if err := r.validateUpdate(updates, true); err != nil {
 		return err
 	}
 
@@ -112,24 +155,27 @@ func (r *reconciler) reconcileUpdate(ctx context.Context, resource *systemv1alph
 			}
 		}
 		// Set status to failed
-		if err := r.updateResourceStatus(resource.Name, systemv1alpha1.E_GvkStatus_Failed); err != nil {
+		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
 			return err
 		}
 		return err
 	}
-	if err := r.updateResourceStatus(resource.Name, systemv1alpha1.E_GvkStatus_Success); err != nil {
+	if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, "", ygotnddp.NddpSystem_ResourceStatus_SUCCESS); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *reconciler) reconcileDelete(ctx context.Context, resource *systemv1alpha1.Gvk) error {
+func (r *reconciler) reconcileDelete(ctx context.Context, resource *ygotnddp.NddpSystem_Gvk) error {
 	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address)
 	log.Debug("reconciling device config update")
 
+	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+
 	delPaths := make([]*gnmi.Path, 0)
 	murder := false
-	for _, xp := range resource.Paths {
+	for _, xp := range resource.Path {
 		path, err := xpath.ToGNMIPath(xp)
 		if err != nil {
 			return err
@@ -162,7 +208,7 @@ func (r *reconciler) reconcileDelete(ctx context.Context, resource *systemv1alph
 			}
 			log.Debug("gnmi delete failed", "Paths", delPaths, "Error", err)
 			// update failed, update resource status in the system cache
-			if err := r.updateResourceStatus(resource.Name, systemv1alpha1.E_GvkStatus_Failed); err != nil {
+			if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
 				return err
 			}
 			// we only process 1 resource at the time
@@ -170,7 +216,7 @@ func (r *reconciler) reconcileDelete(ctx context.Context, resource *systemv1alph
 
 		}
 		// delete resources from the system cache
-		if err := r.deleteResource(resource.Name); err != nil {
+		if err := r.cache.DeleteSystemResource(crSystemDeviceName, *resource.Name); err != nil {
 			return err
 		}
 	}
