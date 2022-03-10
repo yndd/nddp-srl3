@@ -31,13 +31,11 @@ import (
 	"github.com/openconfig/gnmi/proto/gnmi_ext"
 	"github.com/pkg/errors"
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
-	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
 	"github.com/yndd/ndd-runtime/pkg/event"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/reconciler/managed"
 	"github.com/yndd/ndd-runtime/pkg/resource"
 	"github.com/yndd/ndd-runtime/pkg/utils"
-	"github.com/yndd/ndd-yang/pkg/leafref"
 	"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/ndd-yang/pkg/yresource"
@@ -110,6 +108,8 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 		managed.WithValidator(&validatorDevice{
 			log:          nddcopts.Logger,
 			deviceSchema: nddcopts.DeviceSchema,
+			deviceModel:  dm,
+			systemModel:  sm,
 		},
 		),
 		managed.WithLogger(nddcopts.Logger.WithValues("Srl3Device", name)),
@@ -142,24 +142,56 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 type validatorDevice struct {
 	log          logging.Logger
 	deviceSchema *yentry.Entry
-}
-
-func (v *validatorDevice) ValidateLeafRef(ctx context.Context, mg resource.Managed, cfg []byte) (managed.ValidateLeafRefObservation, error) {
-	return managed.ValidateLeafRefObservation{
-		Success:          true,
-		ResolvedLeafRefs: []*leafref.ResolvedLeafRef{}}, nil
-}
-
-func (v *validatorDevice) ValidateParentDependency(ctx context.Context, mg resource.Managed, cfg []byte) (managed.ValidateParentDependencyObservation, error) {
-	return managed.ValidateParentDependencyObservation{
-		Success:          true,
-		ResolvedLeafRefs: []*leafref.ResolvedLeafRef{}}, nil
+	deviceModel  *model.Model
+	systemModel  *model.Model
 }
 
 // ValidateResourceIndexes validates if the indexes of a resource got changed
 // if so we need to delete the original resource, because it will be dangling if we dont delete it
-func (v *validatorDevice) ValidateResourceIndexes(ctx context.Context, mg resource.Managed) (managed.ValidateResourceIndexesObservation, error) {
-	return managed.ValidateResourceIndexesObservation{Changed: false, ResourceIndexes: map[string]string{}}, nil
+func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Managed, resourceList map[string]*ygotnddp.NddpSystem_Gvk) (managed.ValidateRootPathsObservation, error) {
+	log := v.log.WithValues("Resource", mg.GetName())
+	log.Debug("ValidateRootPaths ...")
+
+	cr, ok := mg.(*srlv1alpha1.Srl3Device)
+	if !ok {
+		return managed.ValidateRootPathsObservation{}, errors.New(errUnexpectedDevice)
+	}
+
+	for resourceName := range resourceList {
+		log.Debug("ValidateRootPaths resourceList", "resourceName", resourceName)
+	}
+
+	crRootPaths, err := v.getRootPaths(cr.Spec.Device)
+	if err != nil {
+		return managed.ValidateRootPathsObservation{}, err
+	}
+
+	rootPaths := []string{}
+	for _, crRootPath := range crRootPaths {
+		log.Debug("ValidateRootPaths rootPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
+		rootPaths = append(rootPaths, yparser.GnmiPath2XPath(crRootPath, true))
+	}
+
+	hierPaths, err := getHierPaths(mg, crRootPaths, resourceList)
+	if err != nil {
+		return managed.ValidateRootPathsObservation{}, err
+	}
+	log.Debug("ValidateRootPaths", "hierPaths", hierPaths)
+
+	hierRootPaths := map[string][]string{}
+	for rootPath, crRootPaths := range hierPaths {
+		for _, crRootPath := range crRootPaths {
+			log.Debug("findPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
+			hierRootPaths[rootPath] = append(hierRootPaths[rootPath], yparser.GnmiPath2XPath(crRootPath, true))
+		}
+	}
+
+	return managed.ValidateRootPathsObservation{
+		Changed:     false,
+		RootPaths:   rootPaths,
+		HierPaths:   hierRootPaths,
+		DeletePaths: []*gnmi.Path{}, // TODO find delta
+	}, nil
 }
 
 // A connector is expected to produce an ExternalClient when its Connect method
@@ -350,31 +382,7 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 		}
 	}
 
-	resourceList, err := e.getResourceList(ctx, mg)
-	if err != nil {
-		return managed.ExternalObservation{}, err
-	}
-
-	for resourceName := range resourceList {
-		log.Debug("resourceList", "resourceName", resourceName)
-	}
-
-	crPaths, err := e.getPaths(cr.Spec.Device)
-	if err != nil {
-		return managed.ExternalObservation{}, err
-	}
-
-	for _, crPath := range crPaths {
-		log.Debug("findPaths", "path", yparser.GnmiPath2XPath(crPath, true))
-	}
-
-	hierPaths, err := getHierPaths(mg, crPaths, resourceList)
-	if err != nil {
-		return managed.ExternalObservation{}, err
-	}
-	log.Debug("Observe Response", "hierPaths", hierPaths)
-
-	observe, err := e.processObserve(crPaths, hierPaths, *cr.Spec.Device, resp)
+	observe, err := e.processObserve(mg.GetRootPaths(), mg.GetHierPaths(), *cr.Spec.Device, resp)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return managed.ExternalObservation{
@@ -384,9 +392,8 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 				Failed:     false,
 				HasData:    false,
 				IsUpToDate: false,
-				Paths:      crPaths,
-				Deletes:    observe.deletes,
-				Updates:    observe.updates,
+				Deletes:    []*gnmi.Path{},
+				Updates:    []*gnmi.Update{},
 			}, nil
 		}
 		return managed.ExternalObservation{}, err
@@ -403,7 +410,6 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 			Failed:     false,
 			HasData:    false,
 			IsUpToDate: false,
-			Paths:      crPaths,
 			Deletes:    observe.deletes,
 			Updates:    observe.updates,
 		}, nil
@@ -420,7 +426,6 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 			Failed:     false,
 			HasData:    true,
 			IsUpToDate: false,
-			Paths:      crPaths,
 			Deletes:    observe.deletes,
 			Updates:    observe.updates,
 		}, nil
@@ -434,7 +439,6 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 		Failed:     false,
 		HasData:    true,
 		IsUpToDate: true,
-		Paths:      crPaths,
 		Deletes:    observe.deletes,
 		Updates:    observe.updates,
 	}, nil
@@ -453,29 +457,6 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 func (e *externalDevice) Create(ctx context.Context, mg resource.Managed, obs managed.ExternalObservation) error {
 	log := e.log.WithValues("Resource", mg.GetName())
 	log.Debug("Creating ...")
-
-	/*
-		cr, ok := mg.(*srlv1alpha1.Srl3Device)
-		if !ok {
-			return errors.New(errUnexpectedDevice)
-		}
-
-		crPaths, err := e.findPaths(cr.Spec.Device)
-		if err != nil {
-			return err
-		}
-	*/
-
-	// create k8s object
-	// processCreate
-	// 0. marshal/unmarshal data
-	// 1. transform the spec data to gnmi updates
-	/*
-		updates, err := e.processK8s(mg, crPaths, systemv1alpha1.E_GvkAction_Create)
-		if err != nil {
-			return errors.Wrap(err, errCreateDevice)
-		}
-	*/
 
 	updates, err := e.getGvkUpate(mg, obs, ygotnddp.NddpSystem_ResourceAction_CREATE)
 	if err != nil {
@@ -545,7 +526,7 @@ func (e *externalDevice) Update(ctx context.Context, mg resource.Managed, obs ma
 
 func (e *externalDevice) Delete(ctx context.Context, mg resource.Managed, obs managed.ExternalObservation) error {
 	log := e.log.WithValues("Resource", mg.GetName())
-	log.Debug("Deleting ...")
+	log.Debug("Deleting ...", "obs", obs)
 
 	/*
 		cr, ok := mg.(*srlv1alpha1.Srl3Device)
@@ -589,83 +570,51 @@ func (e *externalDevice) Delete(ctx context.Context, mg resource.Managed, obs ma
 	return nil
 }
 
-func (e *externalDevice) GetTarget() []string {
-	return e.targets
-}
-
-func (e *externalDevice) GetConfig(ctx context.Context, mg resource.Managed) ([]byte, error) {
-	//e.log.Debug("Get Config ...")
-	req := &gnmi.GetRequest{
-		Prefix: &gnmi.Path{Target: shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name)},
-		Path: []*gnmi.Path{
-			{
-				Elem: []*gnmi.PathElem{},
-			},
-		},
-		Encoding: gnmi.Encoding_JSON,
-		//Type:     gnmi.GetRequest_DataType(gnmi.GetRequest_CONFIG),
-	}
-
-	resp, err := e.client.Get(ctx, req)
-	if err != nil {
-		return make([]byte, 0), errors.Wrap(err, errGetConfig)
-	}
-
-	if len(resp.GetNotification()) != 0 {
-		if len(resp.GetNotification()[0].GetUpdate()) != 0 {
-			x2, err := yparser.GetValue(resp.GetNotification()[0].GetUpdate()[0].Val)
-			if err != nil {
-				return make([]byte, 0), errors.Wrap(err, errGetConfig)
-			}
-
-			data, err := json.Marshal(x2)
-			if err != nil {
-				return make([]byte, 0), errors.Wrap(err, errJSONMarshal)
-			}
-			return data, nil
-		}
-	}
-	//e.log.Debug("Get Config Empty response")
-	return nil, nil
-}
-
-func (e *externalDevice) GetResourceName(ctx context.Context, mg resource.Managed, path *gnmi.Path) (string, error) {
-	//e.log.Debug("Get GetResourceName ...", "remotePath", yparser.GnmiPath2XPath(path, true))
-	crSystemDeviceName := shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
-
+func (e *externalDevice) GetResourceList(ctx context.Context, mg resource.Managed) (map[string]*ygotnddp.NddpSystem_Gvk, error) {
+	// get system device list
+	crSystemDeviceName := "ygot." + shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
 	// gnmi get request
-	req := &gnmi.GetRequest{
+	reqSystemCache := &gnmi.GetRequest{
 		Prefix:   &gnmi.Path{Target: crSystemDeviceName},
-		Path:     []*gnmi.Path{path},
+		Path:     []*gnmi.Path{{}},
 		Encoding: gnmi.Encoding_JSON,
-		Extension: []*gnmi_ext.Extension{
-			{Ext: &gnmi_ext.Extension_RegisteredExt{
-				RegisteredExt: &gnmi_ext.RegisteredExtension{Id: gnmi_ext.ExtensionID_EID_EXPERIMENTAL, Msg: []byte(gvkresource.Operation_GetResourceNameFromPath)}}},
-		},
 	}
 
 	// gnmi get response
-	resp, err := e.client.Get(ctx, req)
+	resp, err := e.client.Get(ctx, reqSystemCache)
 	if err != nil {
-		return "", errors.Wrap(err, errGetResourceName)
+		return nil, err
+	}
+	var systemCache interface{}
+	if len(resp.GetNotification()) == 0 {
+		return nil, nil
+	}
+	if len(resp.GetNotification()) != 0 && len(resp.GetNotification()[0].GetUpdate()) != 0 {
+		// get value from gnmi get response
+		systemCache, err = yparser.GetValue(resp.GetNotification()[0].GetUpdate()[0].Val)
+		if err != nil {
+			return nil, errors.Wrap(err, errJSONMarshal)
+		}
+
+		switch systemCache.(type) {
+		case nil:
+			// resource has no data
+			return nil, nil
+		}
 	}
 
-	x2, err := yparser.GetValue(resp.GetNotification()[0].GetUpdate()[0].Val)
+	systemData, err := json.Marshal(systemCache)
 	if err != nil {
-		return "", errors.Wrap(err, errJSONMarshal)
+		return nil, err
 	}
-
-	d, err := json.Marshal(x2)
+	goStruct, err := e.systemModel.NewConfigStruct(systemData, true)
 	if err != nil {
-		return "", errors.Wrap(err, errJSONMarshal)
+		return nil, err
+	}
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return nil, errors.New("wrong object nddp")
 	}
 
-	var resourceName nddv1.ResourceName
-	if err := json.Unmarshal(d, &resourceName); err != nil {
-		return "", errors.Wrap(err, errJSONUnMarshal)
-	}
-
-	//e.log.Debug("Get ResourceName Response", "remotePath", yparser.GnmiPath2XPath(path, true), "ResourceName", resourceName)
-
-	return resourceName.Name, nil
+	return nddpDevice.Gvk, nil
 }

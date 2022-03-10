@@ -36,6 +36,7 @@ type Cache interface {
 
 	// system cache methods
 	GetSystemExhausted(target string) (*uint32, error)
+	SetSystemExhausted(target string, e uint32) error
 	SetSystemCacheStatus(target string, status bool) error
 	GetSystemResourceList(target string) (map[string]*ygotnddp.NddpSystem_Gvk, error)
 	GetSystemResource(target, gvkName string) (*ygotnddp.NddpSystem_Gvk, error)
@@ -177,17 +178,21 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 
 	//fmt.Printf("ValidateUpdate deviceName: %s, curGoStruct: %v\n", target, curGoStruct)
 	//fmt.Printf("ValidateUpdate deviceName: %s, jsonTree: %v\n", target, jsonTree)
+	for _, u := range updates {
+		fullPath := cleanPath(u.GetPath())
+		val := u.GetVal()
+		fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
+	}
 
 	var goStruct ygot.ValidatedGoStruct
 	for _, u := range updates {
 		fullPath := cleanPath(u.GetPath())
 		val := u.GetVal()
-		/*
-			fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
-			if replace {
-				fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
-			}
-		*/
+
+		fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
+		//	if replace {
+		//		fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
+		//	}
 
 		// we need to return to the schema root for the next update
 		schema := m.SchemaTreeRoot
@@ -253,15 +258,15 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 			if nodeVal, err = ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{}); err != nil {
 				return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct:")
 			}
-			if replace {
-				fmt.Printf("ValidateUpdate ok nodeVal 1: %v\n", nodeVal)
-				/*
-					if err := json.Unmarshal(v, &nodeVal); err != nil {
-						return nil, errors.Wrap(err, "unmarshaling json data failed")
-					}
-					fmt.Printf("ValidateUpdate ok nodeVal 2: %v\n", nodeVal)
-				*/
-			}
+			//if replace {
+			//	fmt.Printf("ValidateUpdate ok nodeVal 1: %v\n", nodeVal)
+
+			//	if err := json.Unmarshal(v, &nodeVal); err != nil {
+			//		return nil, errors.Wrap(err, "unmarshaling json data failed")
+			//	}
+			//	fmt.Printf("ValidateUpdate ok nodeVal 2: %v\n", nodeVal)
+
+			//}
 		} else {
 			/*
 				if replace {
@@ -269,14 +274,19 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 				}
 			*/
 			var err error
-			if nodeVal, err = value.ToScalar(val); err != nil {
-				return nil, errors.Wrap(err, "cannot convert leaf node to scalar type")
-			}
 			/*
-				if replace {
-					fmt.Printf("ValidateUpdate nok nodeVal: %v\n", nodeVal)
+				if nodeVal, err = value.ToScalar(val); err != nil {
+					return nil, errors.Wrap(err, "cannot convert leaf node to scalar type")
 				}
 			*/
+			if nodeVal, err = yparser.GetValue(val); err != nil {
+				return nil, errors.Wrap(err, "cannot convert leaf node to scalar type")
+			}
+
+			if !replace {
+				fmt.Printf("ValidateUpdate scalar nodeVal: %v\n", nodeVal)
+			}
+
 		}
 		// replace or update
 		op := gnmi.UpdateResult_UPDATE
@@ -305,22 +315,27 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 
 					if len(elem.GetKey()) == 0 {
 						// err is grpcstatus error
+						fmt.Printf("setPathWithoutAttribute: schemaName: %s, schemaKind: %s\n", schema.Name, schema.Kind.String())
+						if newSchema, ok := schema.Dir[elem.Name]; ok {
+							fmt.Printf("setPathWithoutAttribute: newSchemaName: %s, newSchemaKind: %s\n", newSchema.Name, newSchema.Kind.String())
+						}
 						if err := setPathWithoutAttribute(op, node, elem, nodeVal); err != nil {
-							// TODO need to add defaults
+							fmt.Printf("setPathWithoutAttribute error: %v\n", err)
 							return nil, err
 						}
 						// set defaults
-						if err := setDefaults(node, schema); err != nil {
+
+						if err := setDefaults(node, elem, schema); err != nil {
+							fmt.Printf("setPathWithoutAttribute setDefaults error: %v\n", err)
 							return nil, err
 						}
+
 						break
 					}
 					// err is grpcstatus error
-					if err := setPathWithAttribute(op, node, elem, nodeVal); err != nil {
-						return nil, err
-					}
-					// set defaults
-					if err := setDefaults(node, schema); err != nil {
+					fmt.Printf("setPathWithAttribute: schemaName: %s, schemaKind: %s\n", schema.Name, schema.Kind.String())
+					if err := setPathWithAttribute(op, node, elem, nodeVal, schema); err != nil {
+						fmt.Printf("setPathWithAttribute: error: %v\n", err)
 						return nil, err
 					}
 					break
@@ -329,22 +344,28 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 				if curNode, schema = getChildNode(node, schema, elem, true); curNode == nil {
 					return nil, errors.Wrap(err, fmt.Sprintf("path elem not found: %v", elem))
 				}
-				//fmt.Printf("ValidateUpdate: getChildNode after : %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
+				fmt.Printf("ValidateUpdate: getChildNode after : %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
+				fmt.Printf("ValidateUpdate: getChildNode after : %s, schemaDir: %v\n", yparser.GnmiPath2XPath(fullPath, true), schema.Dir)
 			case []interface{}:
 				return nil, errors.Wrap(err, fmt.Sprintf("incompatible path elem: %v", elem))
 			default:
 				return nil, errors.Wrap(err, fmt.Sprintf("wrong node type: %T", curNode))
 			}
 		}
+		if strings.Contains(yparser.GnmiPath2XPath(fullPath, true), "/interface[name=ethernet-1/49]") {
+			fmt.Printf("ValidateUpdate jsonTree: %v\n", jsonTree["interface"])
+		}
 		jsonDump, err := json.Marshal(jsonTree)
 		if err != nil {
 			return nil, fmt.Errorf("error in marshaling IETF JSON tree to bytes: %v", err)
 		}
+
 		goStruct, err = m.NewConfigStruct(jsonDump, true)
 		if err != nil {
 			return nil, fmt.Errorf("error in creating config struct from IETF JSON data: %v", err)
 		}
 	}
+	fmt.Printf("ValidateUpdate jsonTree done\n")
 	return goStruct, nil
 }
 
@@ -460,7 +481,7 @@ func setPathWithoutAttribute(op gnmi.UpdateResult_Operation, curNode map[string]
 	nodeValAsTree, nodeValIsTree := nodeVal.(map[string]interface{})
 	if op == gnmi.UpdateResult_REPLACE || !hasElem || !nodeValIsTree {
 		curNode[pathElem.Name] = nodeVal
-		//fmt.Printf("ValidateUpdate: curNode: %v\n", curNode)
+		fmt.Printf("ValidateUpdate: curNode: %v, nodeVal: %v\n", curNode, nodeVal)
 		return nil
 	}
 	targetAsTree, ok := target.(map[string]interface{})
@@ -470,13 +491,14 @@ func setPathWithoutAttribute(op gnmi.UpdateResult_Operation, curNode map[string]
 	for k, v := range nodeValAsTree {
 		targetAsTree[k] = v
 	}
+
 	return nil
 }
 
 // setPathWithAttribute replaces or updates a child node of curNode in the IETF
 // JSON config tree, where the child node is indexed by pathElem with attribute.
 // The function returns grpc status error if unsuccessful.
-func setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]interface{}, pathElem *gnmi.PathElem, nodeVal interface{}) error {
+func setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]interface{}, pathElem *gnmi.PathElem, nodeVal interface{}, schema *yang.Entry) error {
 	//fmt.Printf("ValidateUpdate: setPathWithAttribute, operation: %v, elem: %v, node: %v, nodeVal: %v\n", op, pathElem, curNode, nodeVal)
 	nodeValAsTree, ok := nodeVal.(map[string]interface{})
 	if !ok {
@@ -488,14 +510,14 @@ func setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]int
 	}
 	if op == gnmi.UpdateResult_REPLACE {
 		for k := range m {
-			fmt.Printf("ValidateUpdate: setPathWithAttribute 1: k: %v, m: %v\n", k, m)
+			//fmt.Printf("ValidateUpdate: setPathWithAttribute 1: k: %v, m: %v\n", k, m)
 			delete(m, k)
 		}
 	}
 	// Debug to be removed below
-	if op == gnmi.UpdateResult_REPLACE {
-		fmt.Printf("ValidateUpdate: setPathWithAttribute 2: m: %v\n", m)
-	}
+	//if op == gnmi.UpdateResult_REPLACE {
+	//	fmt.Printf("ValidateUpdate: setPathWithAttribute 2: m: %v\n", m)
+	//}
 	// Debug to be removed above
 	for attrKey, attrVal := range pathElem.GetKey() {
 		m[attrKey] = attrVal
@@ -508,25 +530,41 @@ func setPathWithAttribute(op gnmi.UpdateResult_Operation, curNode map[string]int
 			}
 		}
 		// Debug to be removed below
-		if op == gnmi.UpdateResult_REPLACE {
-			fmt.Printf("ValidateUpdate: setPathWithAttribute 3: m: %v\n", m)
-		}
+		//if op == gnmi.UpdateResult_REPLACE {
+		//	fmt.Printf("ValidateUpdate: setPathWithAttribute 3: m: %v\n", m)
+		//}
 		// Debug to be removed above
 	}
 	for k, v := range nodeValAsTree {
 		m[k] = v
 		// Debug to be removed below
-		if op == gnmi.UpdateResult_REPLACE {
-			fmt.Printf("ValidateUpdate: setPathWithAttribute 4: k: %v, v: %v\n", k, v)
-		}
+		//if op == gnmi.UpdateResult_REPLACE {
+		//	fmt.Printf("ValidateUpdate: setPathWithAttribute 4: k: %v, v: %v\n", k, v)
+		//}
 		// Debug to be removed above
 	}
 	// Debug to be removed below
-	if op == gnmi.UpdateResult_REPLACE {
-		fmt.Printf("ValidateUpdate: setPathWithAttribute 5: m: %v\n", m)
-		fmt.Printf("ValidateUpdate: setPathWithAttribute 5: curNode: %v\n", curNode)
-	}
+	//if op == gnmi.UpdateResult_REPLACE {
+	//	fmt.Printf("ValidateUpdate: setPathWithAttribute 5: m: %v\n", m)
+	//	fmt.Printf("ValidateUpdate: setPathWithAttribute 5: curNode: %v\n", curNode)
+	//}
 	// Debug to be removed above
+
+	// set defaults
+	/*
+		newSchema, ok := schema.Dir[pathElem.GetName()]
+		if ok {
+			if err := setDefaults(m, newSchema); err != nil {
+				fmt.Printf("set default error: %v\n", err)
+				return err
+			}
+		}
+	*/
+	if err := setDefaults(m, pathElem, schema); err != nil {
+		fmt.Printf("set default error: %v\n", err)
+		return err
+	}
+
 	return nil
 }
 
@@ -586,6 +624,7 @@ func getChildNode(node map[string]interface{}, schema *yang.Entry, elem *gnmi.Pa
 	//c.log.Debug("getChildNode", "elem name", elem.GetName(), "elem key", elem.GetKey())
 
 	if nextSchema, ok = schema.Dir[elem.GetName()]; !ok {
+		// returning nil will be picked up as an error
 		return nil, nil
 	}
 
@@ -679,48 +718,72 @@ func getKeyedListEntry(node map[string]interface{}, elem *gnmi.PathElem, createI
 	return m
 }
 
-func setDefaults(node map[string]interface{}, schema *yang.Entry) error {
+func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *yang.Entry) error {
 	// check schema for defaults and fallback to default if required
-	var nodeVal interface{}
-	var err error
-	for elem, schema := range schema.Dir {
-		if len(schema.Default) > 0 {
-			//fmt.Printf("ValidateUpdate: default elem: %s, val: %v, type: %s\n", elem, schema.Default, schema.Type.Kind.String())
-			nodeVal = schema.Default[0]
-			switch schema.Type.Kind.String() {
-			case "boolean":
-				nodeVal, err = strconv.ParseBool(schema.Default[0])
-				if err != nil {
-					return err
-				}
-			case "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64":
-				d, err := strconv.Atoi(schema.Default[0])
-				if err != nil {
-					return err
-				}
-				switch schema.Type.Kind.String() {
-				case "uint8":
-					nodeVal = uint8(d)
-				case "uint16":
-					nodeVal = uint16(d)
-				case "uint32":
-					nodeVal = uint32(d)
-				case "uint64":
-					nodeVal = uint64(d)
-				case "int8":
-					nodeVal = int8(d)
-				case "int16":
-					nodeVal = int16(d)
-				case "int32":
-					nodeVal = int32(d)
-				case "int64":
-					nodeVal = int64(d)
-				}
-			}
-			if err := setPathWithoutAttribute(gnmi.UpdateResult_UPDATE, node, &gnmi.PathElem{Name: elem}, nodeVal); err != nil {
-				return err
-			}
+	newSchema, ok := schema.Dir[pathElem.GetName()]
+	if !ok {
+		return fmt.Errorf("wrong schema in setDefaults elem: %v", pathElem)
+	}
+	if newSchema.Kind.String() == "Leaf" {
+		// this is a leaf
+		if len(newSchema.Default) > 0 {
+			fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v\n", pathElem.GetName(), schema.Default, node)
+			setDefaultValue(node, pathElem.GetName(), newSchema)
 		}
+		return nil
+	}
+	// this is a directory
+
+	for elem, schema := range newSchema.Dir {
+		fmt.Printf("ValidateUpdate: set default: elem: %s,  schema default: %v\n", elem, schema.Default)
+		if len(schema.Default) > 0 {
+			fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v\n", elem, schema.Default, node)
+			setDefaultValue(node, elem, schema)
+		}
+	}
+	return nil
+}
+
+func setDefaultValue(node map[string]interface{}, elem string, schema *yang.Entry) error {
+	fmt.Printf("ValidateUpdate: default elem: %s, val: %v, type: %s\n", elem, schema.Default, schema.Type.Kind.String())
+	var nodeVal interface{}
+	nodeVal = schema.Default[0]
+	switch schema.Type.Kind.String() {
+	case "boolean":
+		v, err := strconv.ParseBool(schema.Default[0])
+		if err != nil {
+			return err
+		}
+		if nodeVal, err = value.ToScalar(&gnmi.TypedValue{Value: &gnmi.TypedValue_BoolVal{BoolVal: v}}); err != nil {
+			return errors.Wrap(err, "cannot convert leaf node to scalar type")
+		}
+		fmt.Printf("ValidateUpdate: elem: %s nodeVal: %#v\n", elem, nodeVal)
+	case "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64":
+		d, err := strconv.Atoi(schema.Default[0])
+		if err != nil {
+			return err
+		}
+		switch schema.Type.Kind.String() {
+		case "uint8":
+			nodeVal = uint8(d)
+		case "uint16":
+			nodeVal = uint16(d)
+		case "uint32":
+			nodeVal = uint32(d)
+		case "uint64":
+			nodeVal = uint64(d)
+		case "int8":
+			nodeVal = int8(d)
+		case "int16":
+			nodeVal = int16(d)
+		case "int32":
+			nodeVal = int32(d)
+		case "int64":
+			nodeVal = int64(d)
+		}
+	}
+	if err := setPathWithoutAttribute(gnmi.UpdateResult_UPDATE, node, &gnmi.PathElem{Name: elem}, nodeVal); err != nil {
+		return err
 	}
 	return nil
 }
@@ -738,6 +801,25 @@ func (c *cache) GetSystemExhausted(target string) (*uint32, error) {
 		return nil, errors.New("wrong object nddp")
 	}
 	return nddpDevice.Cache.Exhausted, nil
+}
+
+func (c *cache) SetSystemExhausted(target string, e uint32) error {
+	defer c.m.Unlock()
+	c.m.Lock()
+	goStruct, ok := c.validated[target]
+	if !ok {
+		return errors.New("target not ready")
+	}
+
+	nddpDevice, ok := goStruct.(*ygotnddp.Device)
+	if !ok {
+		return errors.New("wrong object nddp")
+	}
+	nddpDevice.Cache.Exhausted = ygot.Uint32(e)
+	*nddpDevice.Cache.ExhaustedNbr++
+
+	c.validated[target] = nddpDevice
+	return nil
 }
 
 func (c *cache) SetSystemCacheStatus(target string, status bool) error {
@@ -805,15 +887,23 @@ func (c *cache) UpdateSystemResourceStatus(target, resourceName, reason string, 
 		return errors.New("wrong object nddp")
 	}
 
-	fmt.Printf("UpdateSystemresourceStatus, target: %s, resourceName: %s, resource: %v\n", target, resourceName, nddpDevice)
-
 	r, ok := nddpDevice.Gvk[resourceName]
 	if !ok {
 		errors.New("resource not found")
 	}
-	fmt.Printf("UpdateSystemresourceStatus, target: %s, resourceName: %s, resource: %v\n", target, resourceName, r)
-	r.Status = status
-	r.Reason = ygot.String(reason)
+
+	if status == ygotnddp.NddpSystem_ResourceStatus_FAILED {
+		*r.Attempt++
+		// we dont update the status to failed unless we tried 3 times
+		if *r.Attempt > 3 {
+			r.Status = ygotnddp.NddpSystem_ResourceStatus_FAILED
+			r.Reason = ygot.String(reason)
+		}
+	} else {
+		// success
+		r.Status = status
+		r.Reason = ygot.String(reason)
+	}
 
 	c.validated[target] = nddpDevice
 	return nil

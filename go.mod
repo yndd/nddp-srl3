@@ -7,7 +7,7 @@ require (
 	github.com/openconfig/gnmi v0.0.0-20210914185457-51254b657b7d
 	github.com/openconfig/goyang v1.0.0
 	github.com/openconfig/ygot v0.15.1
-	github.com/yndd/ndd-runtime v0.2.52
+	github.com/yndd/ndd-runtime v0.3.1
 	google.golang.org/grpc v1.43.0
 	google.golang.org/protobuf v1.27.1
 	k8s.io/apimachinery v0.22.2
@@ -25,7 +25,7 @@ require (
 	github.com/yndd/ndd-core v0.1.7
 	github.com/yndd/ndd-yang v0.2.0
 	github.com/yndd/nddo-runtime v0.0.72
-	github.com/yndd/nddp-system v0.1.4
+	github.com/yndd/nddp-system v0.2.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.22.2
 	k8s.io/client-go v0.22.2
@@ -52,7 +52,6 @@ require (
 	github.com/aws/smithy-go v1.8.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
-	github.com/cenkalti/backoff/v4 v4.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/libkv v0.2.2-0.20180912205406-458977154600 // indirect
@@ -60,7 +59,6 @@ require (
 	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/frankban/quicktest v1.14.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
 	github.com/go-git/go-billy/v5 v5.3.1 // indirect

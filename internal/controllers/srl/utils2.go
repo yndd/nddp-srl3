@@ -11,6 +11,24 @@ import (
 	"github.com/pkg/errors"
 )
 
+//process Spec data marshals the data and remove the prent hierarchical keys
+func (e *externalDevice) processData(x interface{}) (map[string]interface{}, error) {
+	config, err := json.Marshal(x)
+	if err != nil {
+		return nil, errors.Wrap(err, errJSONMarshal)
+	}
+
+	//e.log.Debug("config", "config", string(config))
+
+	rootSpecStruct, err := e.deviceModel.NewConfigStruct(config, false)
+	if err != nil {
+		e.log.Debug("processDataRFC7951 newConfigStruct error", "error", err)
+		return nil, err
+	}
+
+	return ygot.ConstructIETFJSON(rootSpecStruct, &ygot.RFC7951JSONConfig{})
+}
+
 func (e *externalDevice) removeNonDefaultDataFromPath(rootPath *gnmi.Path, x interface{}) (interface{}, error) {
 	jsonIETFTree, err := e.processData(x)
 	if err != nil {

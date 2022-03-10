@@ -143,7 +143,7 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 			} else {
 				if resource.Action != ygotnddp.NddpSystem_ResourceAction_DELETE {
 					switch resource.Status {
-					case ygotnddp.NddpSystem_ResourceStatus_DELETEPENDING:
+					case ygotnddp.NddpSystem_ResourceStatus_PENDING:
 						// the action did not complete so far
 						return nil, status.Error(codes.AlreadyExists, "")
 					}
@@ -151,22 +151,18 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 					switch resource.Status {
 					case ygotnddp.NddpSystem_ResourceStatus_FAILED:
 						// resource exists, but failed, return the spec data
-						/*
-							x, err := s.getSpecdata(systemTarget, gvk)
-							if err != nil {
-								return nil, status.Error(codes.Internal, err.Error())
-							}
-							if updates, err = appendUpdateResponse(x, req.GetPath()[0], updates); err != nil {
-								return nil, status.Error(codes.Internal, err.Error())
-							}
-							notifications[0] = &gnmi.Notification{
-								Timestamp: ts,
-								Prefix:    prefix,
-								Update:    updates,
-							}
-						*/
-						return nil, status.Error(codes.FailedPrecondition, "resource exist, but failed")
-					case ygotnddp.NddpSystem_ResourceStatus_CREATEPENDING, ygotnddp.NddpSystem_ResourceStatus_UPDATEPENDING:
+						notifications[0] = &gnmi.Notification{
+							Timestamp: ts,
+							Prefix:    prefix,
+							Update: []*gnmi.Update{
+								{
+									Path: &gnmi.Path{},
+									Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: []byte(*resource.Spec)}},
+								},
+							},
+						}
+						return notifications, status.Error(codes.FailedPrecondition, "resource exist, but failed")
+					case ygotnddp.NddpSystem_ResourceStatus_PENDING:
 						// the action did not complete so far
 						return nil, status.Error(codes.AlreadyExists, "")
 					}

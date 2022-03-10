@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-runtime/pkg/reconciler/managed"
 	"github.com/yndd/ndd-runtime/pkg/resource"
-	"github.com/yndd/ndd-runtime/pkg/utils"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
@@ -16,7 +15,7 @@ import (
 )
 
 func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalObservation, action ygotnddp.E_NddpSystem_ResourceAction) ([]*gnmi.Update, error) {
-	e.log.Debug("getGvkUpate", "paths", obs.Paths)
+	e.log.Debug("getGvkUpate")
 
 	// get gvk Name
 	gvkName := gvkresource.GetGvkName(mg)
@@ -52,14 +51,15 @@ func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalOb
 	*/
 
 	gvkData := &ygotnddp.NddpSystem_Gvk{
-		Name:   ygot.String(gvkName),
-		Action: action,
-		Path:   getPaths(obs.Paths),
-		Status: getStatus(action),
-		Reason: ygot.String(""),
-		Spec:   spec,
-		Delete: getPaths(obs.Deletes),
-		Update: updates,
+		Name:    ygot.String(gvkName),
+		Action:  action,
+		Path:    mg.GetRootPaths(),
+		Status:  ygotnddp.NddpSystem_ResourceStatus_PENDING,
+		Reason:  ygot.String(""),
+		Spec:    spec,
+		Delete:  getPaths(obs.Deletes),
+		Update:  updates,
+		Attempt: ygot.Uint32(0),
 	}
 
 	/*
@@ -95,7 +95,7 @@ func getSpec(mg resource.Managed) (*string, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, errJSONMarshal)
 	}
-	return utils.StringPtr(string(spec)), nil
+	return ygot.String(string(spec)), nil
 }
 
 func getPaths(gnmiPaths []*gnmi.Path) []string {
@@ -124,16 +124,4 @@ func getUpdates(gnmiUpdates []*gnmi.Update) (map[string]*ygotnddp.NddpSystem_Gvk
 		}
 	}
 	return updates, nil
-}
-
-func getStatus(action ygotnddp.E_NddpSystem_ResourceAction) ygotnddp.E_NddpSystem_ResourceStatus {
-	switch action {
-	case ygotnddp.NddpSystem_ResourceAction_CREATE:
-		return ygotnddp.NddpSystem_ResourceStatus_CREATEPENDING
-	case ygotnddp.NddpSystem_ResourceAction_DELETE:
-		return ygotnddp.NddpSystem_ResourceStatus_DELETEPENDING
-	case ygotnddp.NddpSystem_ResourceAction_UPDATE:
-		return ygotnddp.NddpSystem_ResourceStatus_UPDATEPENDING
-	}
-	return ygotnddp.NddpSystem_ResourceStatus_None
 }

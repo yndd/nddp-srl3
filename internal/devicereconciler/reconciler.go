@@ -33,7 +33,6 @@ import (
 	"github.com/yndd/nddp-srl3/internal/shared"
 	deviceschema "github.com/yndd/nddp-srl3/pkg/yangschema"
 	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
-	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc"
 )
 
@@ -163,11 +162,11 @@ func (r *reconciler) run() error {
 	timeout := make(chan bool, 1)
 	timeout <- true
 
+	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+
 	// set cache status to up
-	if err := r.initExhausted(); err != nil {
-		return err
-	}
-	if err := r.setUpdateStatus(true); err != nil {
+	if err := r.cache.SetSystemExhausted(crSystemDeviceName, 0); err != nil {
 		return err
 	}
 	for {
@@ -180,40 +179,22 @@ func (r *reconciler) run() error {
 			// -> device is not exhausted
 			// -> new updates from k8s operator are received
 			// else dont do anything since we need to wait for an update
-			exhausted, err := r.getExhausted()
+
+			exhausted, err := r.cache.GetSystemExhausted(crSystemDeviceName)
 			if err != nil {
 				log.Debug("error getting exhausted", "error", err)
 			} else {
-				if exhausted == 0 {
-					// get the list of MR
-					crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
-					crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
-					resourceList, err := r.cache.GetSystemResourceList(crSystemDeviceName)
-					if err != nil {
-						return err
+				if *exhausted == 0 {
+					if err := r.handlePendingResources(); err != nil {
+						r.log.Debug("reconciler", "error", err)
 					}
-					for _, resource := range resourceList {
-						switch resource.Status {
-						case ygotnddp.NddpSystem_ResourceStatus_UPDATEPENDING:
-							if err := r.reconcileUpdate(r.ctx, resource); err != nil {
-								log.Debug("reconciler error", "error", err)
-							}
-						case ygotnddp.NddpSystem_ResourceStatus_DELETEPENDING:
-							if err := r.reconcileDelete(r.ctx, resource); err != nil {
-								log.Debug("reconciler error", "error", err)
-							}
-						case ygotnddp.NddpSystem_ResourceStatus_CREATEPENDING:
-							if err := r.reconcileCreate(r.ctx, resource); err != nil {
-								log.Debug("reconciler error", "error", err)
-							}
-						}
-					}
+
 				} else {
-					exhausted--
-					if exhausted < 0 {
-						exhausted = 0
+					*exhausted--
+					if *exhausted < 0 {
+						*exhausted = 0
 					}
-					r.setExhausted(exhausted)
+					r.cache.SetSystemExhausted(crSystemDeviceName, *exhausted)
 				}
 			}
 

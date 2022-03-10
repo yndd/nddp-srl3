@@ -37,24 +37,19 @@ func (mg *Srl3Device) GetDeletionPolicy() nddv1.DeletionPolicy {
 	return mg.Spec.DeletionPolicy
 }
 
-// GetExternalLeafRefs of this Srl3Device.
-func (mg *Srl3Device) GetExternalLeafRefs() []string {
-	return mg.Status.ExternalLeafRefs
-}
-
 // GetNetworkNodeReference of this Srl3Device.
 func (mg *Srl3Device) GetNetworkNodeReference() *nddv1.Reference {
 	return mg.Spec.NetworkNodeReference
 }
 
-// GetResourceIndexes of this Srl3Device.
-func (mg *Srl3Device) GetResourceIndexes() map[string]string {
-	return mg.Status.ResourceIndexes
+// SetRootPaths of this Srl3Device.
+func (mg *Srl3Device) GetRootPaths() []string {
+	return mg.Status.RootPaths
 }
 
-// GetTarget of this Srl3Device.
-func (mg *Srl3Device) GetTarget() []string {
-	return mg.Status.Target
+// SetHierPaths of this Srl3Device.
+func (mg *Srl3Device) GetHierPaths() map[string][]string {
+	return mg.Status.HierPaths
 }
 
 // SetActive of this Srl3Device.
@@ -72,22 +67,17 @@ func (mg *Srl3Device) SetDeletionPolicy(r nddv1.DeletionPolicy) {
 	mg.Spec.DeletionPolicy = r
 }
 
-// SetExternalLeafRefs of this Srl3Device.
-func (mg *Srl3Device) SetExternalLeafRefs(n []string) {
-	mg.Status.ExternalLeafRefs = n
-}
-
 // SetNetworkNodeReference of this Srl3Device.
 func (mg *Srl3Device) SetNetworkNodeReference(r *nddv1.Reference) {
 	mg.Spec.NetworkNodeReference = r
 }
 
-// SetResourceIndexes of this Srl3Device.
-func (mg *Srl3Device) SetResourceIndexes(n map[string]string) {
-	mg.Status.ResourceIndexes = n
+// SetRootPaths of this Srl3Device.
+func (mg *Srl3Device) SetRootPaths(n []string) {
+	mg.Status.RootPaths = n
 }
 
-// SetTarget of this Srl3Device.
-func (mg *Srl3Device) SetTarget(t []string) {
-	mg.Status.Target = t
+// SetHierPaths of this Srl3Device.
+func (mg *Srl3Device) SetHierPaths(n map[string][]string) {
+	mg.Status.HierPaths = n
 }

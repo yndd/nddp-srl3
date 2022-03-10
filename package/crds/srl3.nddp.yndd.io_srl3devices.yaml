@@ -29,11 +29,8 @@ spec:
     - jsonPath: .status.conditions[?(@.kind=='Synced')].status
       name: SYNC
       type: string
-    - jsonPath: .status.conditions[?(@.kind=='LeafrefValidationSuccess')].status
-      name: LEAFREF
-      type: string
-    - jsonPath: .status.conditions[?(@.kind=='ParentValidationSuccess')].status
-      name: PARENTDEP
+    - jsonPath: .status.conditions[?(@.kind=='RootPathValidationSuccess')].status
+      name: ROOTPATH
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
@@ -13053,20 +13050,17 @@ spec:
                   - status
                   type: object
                 type: array
-              externalLeafRefs:
-                description: ExternalLeafRefs tracks the external resources this resource
-                  is dependent upon
-                items:
-                  type: string
-                type: array
-              resourceIndexes:
+              hierPaths:
                 additionalProperties:
-                  type: string
-                description: ResourceIndexes tracks the indexes that or used by the
-                  resource
+                  items:
+                    type: string
+                  type: array
+                description: HierPaths tracks the hierarchical paths of the CR based
+                  on adjacent resources
                 type: object
-              target:
-                description: Target used by the resource
+              rootPaths:
+                description: rootPaths define the rootPaths of the cr, used to monitor
+                  the resource status
                 items:
                   type: string
                 type: array

@@ -52,7 +52,7 @@ help: ## Display this help.
 
 ##@ Development
 
-generate: controller-gen ndd-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	rm -rf package/crds/
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) webhook paths="./..." output:crd:artifacts:config=package/crds
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -95,8 +95,3 @@ package-push: ## build ndd package.
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
 	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1)
-
-NDD_GEN = $(shell pwd)/bin/ndd-gen
-ndd-gen: ## Download ndd-gen locally if necessary.
-	$(call go-get-tool,$(NDD_GEN),github.com/yndd/ndd-tools/cmd/ndd-gen@v0.1.13)
-

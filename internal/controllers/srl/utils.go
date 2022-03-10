@@ -1,7 +1,6 @@
 package srl
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -15,28 +14,28 @@ import (
 	"github.com/yndd/ndd-yang/pkg/yparser"
 
 	//srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
-	"github.com/yndd/nddp-srl3/internal/shared"
+
 	//systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
 
-func (e *externalDevice) getPaths(x interface{}) ([]*gnmi.Path, error) {
-	jsonTree, err := e.processData(x)
+func (v *validatorDevice) getRootPaths(x interface{}) ([]*gnmi.Path, error) {
+	jsonTree, err := v.processData(x)
 	if err != nil {
-		e.log.Debug("error in constructing IETF JSON tree from config struct", "error", err)
+		v.log.Debug("error in constructing IETF JSON tree from config struct", "error", err)
 		return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct")
 	}
 
 	//e.log.Debug("jsonTree", "jsonTree", jsonTree)
 
-	schema := e.deviceModel.SchemaTreeRoot
+	schema := v.deviceModel.SchemaTreeRoot
 	paths := make([]*gnmi.Path, 0)
 	return getChildNode(paths, jsonTree, schema, 0, true)
 }
 
 //process Spec data marshals the data and remove the prent hierarchical keys
-func (e *externalDevice) processData(x interface{}) (map[string]interface{}, error) {
+func (v *validatorDevice) processData(x interface{}) (map[string]interface{}, error) {
 	config, err := json.Marshal(x)
 	if err != nil {
 		return nil, errors.Wrap(err, errJSONMarshal)
@@ -44,16 +43,14 @@ func (e *externalDevice) processData(x interface{}) (map[string]interface{}, err
 
 	//e.log.Debug("config", "config", string(config))
 
-	rootSpecStruct, err := e.deviceModel.NewConfigStruct(config, false)
+	rootSpecStruct, err := v.deviceModel.NewConfigStruct(config, false)
 	if err != nil {
-		e.log.Debug("processDataRFC7951 newConfigStruct error", "error", err)
+		v.log.Debug("processDataRFC7951 newConfigStruct error", "error", err)
 		return nil, err
 	}
 
 	return ygot.ConstructIETFJSON(rootSpecStruct, &ygot.RFC7951JSONConfig{})
 }
-
-
 
 func getChildNode(paths []*gnmi.Path, curNode map[string]interface{}, schema *yang.Entry, pathDepth int, startEntry bool) ([]*gnmi.Path, error) {
 	//fmt.Printf("getChildNode: %v\n", curNode)
@@ -237,119 +234,6 @@ func hasDataAndOrContainer(curNode map[string]interface{}, schema *yang.Entry) (
 	return hasData, hasContainer, nil
 }
 
-/*
-func (e *externalDevice) processK8s(mg resource.Managed, paths []*gnmi.Path, action systemv1alpha1.E_GvkAction) ([]*gnmi.Update, error) {
-	gvkName := gvkresource.GetGvkName(mg)
-
-	cr, ok := mg.(*srlv1alpha1.Srl3Device)
-	if !ok {
-		return nil, errors.New(errUnexpectedDevice)
-	}
-
-	config, err := json.Marshal(cr.Spec.Device)
-	if err != nil {
-		return nil, errors.Wrap(err, errJSONMarshal)
-	}
-
-	gnmiUpdate := &gnmi.Update{
-		Path: &gnmi.Path{
-			Elem: []*gnmi.PathElem{
-				{Name: "gvk", Key: map[string]string{"name": gvkName}},
-				{Name: "data"},
-			},
-		},
-		Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: config}},
-	}
-
-	// prepare gvk resource data
-	gvkUpdates, err := e.processK8sResource(mg, paths, action)
-	if err != nil {
-		return nil, err
-	}
-
-	// append gnmi data to the resource data
-	gvkUpdates = append(gvkUpdates, gnmiUpdate)
-	return gvkUpdates, nil
-}
-*/
-/*
-func (e *externalDevice) processK8sResource(mg resource.Managed, paths []*gnmi.Path, action systemv1alpha1.E_GvkAction) ([]*gnmi.Update, error) {
-	var gvkData *systemv1alpha1.Gvk
-	switch action {
-	case systemv1alpha1.E_GvkAction_Create:
-		gvkData = gvkresource.GetK8sResourceCreate(mg, paths)
-	case systemv1alpha1.E_GvkAction_Update:
-		gvkData = gvkresource.GetK8sResourceUpdate(mg, paths)
-	case systemv1alpha1.E_GvkAction_Delete:
-		gvkData = gvkresource.GetK8sResourceDelete(mg, paths)
-	default:
-		return nil, errors.New("invalid action")
-	}
-
-	gvkPath := &gnmi.Path{
-		Elem: []*gnmi.PathElem{
-			{Name: "gvk", Key: map[string]string{"name": gvkData.Name}},
-		},
-	}
-	gvkd, err := processGvkData(*gvkData)
-	if err != nil {
-		return nil, err
-	}
-
-	return yparser.GetUpdatesFromJSON(gvkPath, gvkd, e.nddpSchema)
-}
-*/
-
-func (e *externalDevice) getResourceList(ctx context.Context, mg resource.Managed) (map[string]*ygotnddp.NddpSystem_Gvk, error) {
-	// get system device list
-	crSystemDeviceName := "ygot." + shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
-	// gnmi get request
-	reqSystemCache := &gnmi.GetRequest{
-		Prefix:   &gnmi.Path{Target: crSystemDeviceName},
-		Path:     []*gnmi.Path{{}},
-		Encoding: gnmi.Encoding_JSON,
-	}
-
-	// gnmi get response
-	resp, err := e.client.Get(ctx, reqSystemCache)
-	if err != nil {
-		return nil, err
-	}
-	var systemCache interface{}
-	if len(resp.GetNotification()) == 0 {
-		return nil, nil
-	}
-	if len(resp.GetNotification()) != 0 && len(resp.GetNotification()[0].GetUpdate()) != 0 {
-		// get value from gnmi get response
-		systemCache, err = yparser.GetValue(resp.GetNotification()[0].GetUpdate()[0].Val)
-		if err != nil {
-			return nil, errors.Wrap(err, errJSONMarshal)
-		}
-
-		switch systemCache.(type) {
-		case nil:
-			// resource has no data
-			return nil, nil
-		}
-	}
-
-	systemData, err := json.Marshal(systemCache)
-	if err != nil {
-		return nil, err
-	}
-	goStruct, err := e.systemModel.NewConfigStruct(systemData, true)
-	if err != nil {
-		return nil, err
-	}
-	nddpDevice, ok := goStruct.(*ygotnddp.Device)
-	if !ok {
-		return nil, errors.New("wrong object nddp")
-	}
-
-	return nddpDevice.Gvk, nil
-
-}
-
 func getHierPaths(mg resource.Managed, crPaths []*gnmi.Path, resourceList map[string]*ygotnddp.NddpSystem_Gvk) (map[string][]*gnmi.Path, error) {
 	hierPaths := make(map[string][]*gnmi.Path, 0)
 	for _, crPath := range crPaths {
@@ -378,7 +262,7 @@ func getHierPaths(mg resource.Managed, crPaths []*gnmi.Path, resourceList map[st
 }
 
 // 1. validate the repsonse to check if it contains the right # elements, data
-func (e *externalDevice) processObserve(crPaths []*gnmi.Path, hierPaths map[string][]*gnmi.Path, specData interface{}, resp *gnmi.GetResponse) (*observe, error) {
+func (e *externalDevice) processObserve(crRootPaths []string, crHierPaths map[string][]string, specData interface{}, resp *gnmi.GetResponse) (*observe, error) {
 	// validate gnmi resp information
 	if len(resp.GetNotification()) == 0 {
 		return &observe{hasData: false}, nil
@@ -405,9 +289,7 @@ func (e *externalDevice) processObserve(crPaths []*gnmi.Path, hierPaths map[stri
 	updates := []*gnmi.Update{}
 	upToDate := true
 	// for each path perform the diff between the spec and resp data
-	for _, crPath := range crPaths {
-		crXpath := yparser.GnmiPath2XPath(crPath, true)
-
+	for _, crRootPath := range crRootPaths {
 		// deepcopy the spec data to avoid data manipulation of the spec
 		j, err := DeepCopy(specData)
 		if err != nil {
@@ -416,6 +298,10 @@ func (e *externalDevice) processObserve(crPaths []*gnmi.Path, hierPaths map[stri
 
 		// spec Data pre-processing
 		// remove all non relevant data from the spec based on the crPath
+		crPath, err := xpath.ToGNMIPath(crRootPath)
+		if err != nil {
+			return &observe{hasData: false}, nil
+		}
 		specGoStruct, err := e.getGoStructFromPath(crPath, j)
 		if err != nil {
 			return nil, errors.Wrap(err, "error processObserve getSpecDataFromPath")
@@ -441,10 +327,14 @@ func (e *externalDevice) processObserve(crPaths []*gnmi.Path, hierPaths map[stri
 		// remove hierarchical paths from response for this particular path
 		switch x := x2.(type) {
 		case map[string]interface{}:
-			if hPaths, ok := hierPaths[crXpath]; ok {
+			if hPaths, ok := crHierPaths[crRootPath]; ok {
 				// remove hierarchical paths
 				for _, hPath := range hPaths {
-					x2 = removeHierarchicalResourceData(x, hPath)
+					crhPath, err := xpath.ToGNMIPath(hPath)
+					if err != nil {
+						return &observe{hasData: false}, nil
+					}
+					x2 = removeHierarchicalResourceData(x, crhPath)
 				}
 			}
 		}
@@ -471,7 +361,7 @@ func (e *externalDevice) processObserve(crPaths []*gnmi.Path, hierPaths map[stri
 				return nil, errors.Wrap(err, "error ygot EmitJSON x2")
 			}
 		*/
-		fmt.Printf("processObserve path   : %s  \n", crXpath)
+		fmt.Printf("processObserve path   : %s  \n", crRootPath)
 		fmt.Printf("processObserve x1 data: %s\n", x1)
 		fmt.Printf("processObserve x2 data: %v\n", x2)
 

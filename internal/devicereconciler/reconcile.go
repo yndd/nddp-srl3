@@ -18,6 +18,8 @@ package devicereconciler
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/google/gnxi/utils/xpath"
 	"github.com/openconfig/gnmi/proto/gnmi"
@@ -29,16 +31,111 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func (r *reconciler) reconcileCreate(ctx context.Context, resource *ygotnddp.NddpSystem_Gvk) error {
+func (r *reconciler) handlePendingResources() error {
+	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+
+	// get the list of Managed Resources (MR)
+	resourceList, err := r.cache.GetSystemResourceList(crSystemDeviceName)
+	if err != nil {
+		return err
+	}
+	pendingResources := map[ygotnddp.E_NddpSystem_ResourceAction]*ygotnddp.NddpSystem_Gvk{}
+	// loop over all resource and check if work is required on them
+	for _, resource := range resourceList {
+		if resource.Status == ygotnddp.NddpSystem_ResourceStatus_PENDING {
+			if pendingResource, ok := pendingResources[resource.Action]; !ok {
+				// no resource is pending for this action so far
+				pendingResources[resource.Action] = resource
+			} else {
+				// check if the new resource is a better fit to be scheduled first or not
+				// check path dependency
+				for _, rootPath := range resource.Path {
+					for _, pendingRootPath := range pendingResource.Path {
+						if strings.Contains(pendingRootPath, rootPath) {
+							// we need to switch the current pending resource with the new pending resource
+							pendingResources[resource.Action] = resource
+							continue
+						}
+					}
+				}
+				// check if the failure attempts are smaller
+				if *resource.Attempt < *pendingResource.Attempt {
+					// we need to switch the current pending resource with the new pending resource
+					pendingResources[resource.Action] = resource
+				}
+			}
+		}
+
+	}
+	// execute the action to the device and update the status
+	// first do update, after delete and lastly create
+	if resource, ok := pendingResources[ygotnddp.NddpSystem_ResourceAction_UPDATE]; ok {
+
+		if r != nil {
+			reconcileErr := r.reconcileUpdate(r.ctx, resource)
+			if err := r.updateResourceStatus(resource, reconcileErr); err != nil {
+				return err
+			}
+		}
+	}
+	if resource, ok := pendingResources[ygotnddp.NddpSystem_ResourceAction_DELETE]; ok {
+		if r != nil {
+			reconcileErr := r.reconcileDelete(r.ctx, resource)
+			if err := r.updateResourceStatus(resource, reconcileErr); err != nil {
+				return err
+			}
+			// delete the resource from the system cache if all succeeded
+			if reconcileErr == nil {
+				r.cache.DeleteSystemResource(crSystemDeviceName, *resource.Name)
+			}
+		}
+
+	}
+	if resource, ok := pendingResources[ygotnddp.NddpSystem_ResourceAction_CREATE]; ok {
+		if r != nil {
+			reconcileErr := r.reconcileCreate(r.ctx, resource)
+			if err := r.updateResourceStatus(resource, reconcileErr); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (r *reconciler) updateResourceStatus(resource *ygotnddp.NddpSystem_Gvk, err error) error {
 	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address)
-	log.Debug("reconciling device config create", "resourceName", *resource.Name)
+	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+	if err != nil {
+		// transaction failed
+		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
+			return err
+		}
+		r.log.Debug("reconciler error", "error", err)
+		return nil
+	}
+	// transaction succeeded
+	if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, "", ygotnddp.NddpSystem_ResourceStatus_SUCCESS); err != nil {
+		return err
+	}
+	if resource, err := r.cache.GetSystemResource(crSystemDeviceName, *resource.Name); err == nil {
+		log.Debug("reconciled resource config end", "resourceName", *resource.Name, "action", resource.Action, "status", resource.Status, "attempts", *resource.Attempt)
+	}
+
+	return nil
+}
+
+func (r *reconciler) reconcileCreate(ctx context.Context, resource *ygotnddp.NddpSystem_Gvk) error {
+	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address,
+		"resourceName", *resource.Name, "action", resource.Action, "status", resource.Status, "attempts", *resource.Attempt)
+	log.Debug("reconciled resource config start")
 
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
 	// validateResource, merges the latest device config with the new config
 	// and validates it against the device Yang schema
-	log.Debug("reconcileCreate", "resource", *resource)
 	newGoStruct, err := r.validateCreate(resource)
 	if err != nil {
 		log.Debug("validation failed", "error", err)
@@ -63,29 +160,22 @@ func (r *reconciler) reconcileCreate(ctx context.Context, resource *ygotnddp.Ndd
 			switch e.Code() {
 			case codes.ResourceExhausted:
 				log.Debug("gnmi update failed exhausted", "error", err)
-				if err := r.setExhausted(60); err != nil {
+				if err := r.cache.SetSystemExhausted(crSystemDeviceName, 60); err != nil {
 					return err
 				}
-				// we return and keep the status as is since we can retry once the device is back in normal state
-				return nil
 			}
 		}
-		// update failed, update resource status in the system cache
-		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
-			return err
-		}
+		// the status will be set in the reconciler
 		return err
 	}
-	// update succeeded, update resource status in the system cache
-	if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, "", ygotnddp.NddpSystem_ResourceStatus_SUCCESS); err != nil {
-		return err
-	}
+	// the status will be set in the reconciler result
 	return nil
 }
 
 func (r *reconciler) reconcileUpdate(ctx context.Context, resource *ygotnddp.NddpSystem_Gvk) error {
-	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address)
-	log.Debug("reconciling device config update")
+	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address,
+		"resourceName", *resource.Name, "action", resource.Action, "status", resource.Status, "attempts", *resource.Attempt)
+	log.Debug("reconciled resource config start")
 
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
@@ -111,23 +201,6 @@ func (r *reconciler) reconcileUpdate(ctx context.Context, resource *ygotnddp.Ndd
 		})
 	}
 
-	/*
-		ns, err := r.processUpdate(resource)
-		if err != nil {
-			return err
-		}
-		deletes := []*gnmi.Path{}
-		updates := []*gnmi.Update{}
-		for _, n := range ns {
-			if len(n.GetUpdate()) > 0 {
-				updates = append(updates, n.GetUpdate()...)
-			}
-			if len(n.GetDelete()) > 0 {
-				deletes = append(deletes, n.GetDelete()...)
-			}
-		}
-	*/
-
 	for _, path := range deletes {
 		log.Debug("reconciling device config update -> delete paths", "path", yparser.GnmiPath2XPath(path, true))
 	}
@@ -149,26 +222,22 @@ func (r *reconciler) reconcileUpdate(ctx context.Context, resource *ygotnddp.Ndd
 			switch e.Code() {
 			case codes.ResourceExhausted:
 				log.Debug("gnmi update failed exhausted", "error", err)
-				if err := r.setExhausted(60); err != nil {
+				if err := r.cache.SetSystemExhausted(crSystemDeviceName, 60); err != nil {
 					return err
 				}
 			}
 		}
-		// Set status to failed
-		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
-			return err
-		}
+		// the status will be set in the reconciler
 		return err
 	}
-	if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, "", ygotnddp.NddpSystem_ResourceStatus_SUCCESS); err != nil {
-		return err
-	}
+	// the status will be set in the reconciler
 	return nil
 }
 
 func (r *reconciler) reconcileDelete(ctx context.Context, resource *ygotnddp.NddpSystem_Gvk) error {
-	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address)
-	log.Debug("reconciling device config update")
+	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address,
+		"resourceName", *resource.Name, "action", resource.Action, "status", resource.Status, "attempts", *resource.Attempt)
+	log.Debug("reconciled resource config start")
 
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
@@ -176,6 +245,7 @@ func (r *reconciler) reconcileDelete(ctx context.Context, resource *ygotnddp.Ndd
 	delPaths := make([]*gnmi.Path, 0)
 	murder := false
 	for _, xp := range resource.Path {
+		log.Debug("reconciled resource config start", "path", xp)
 		path, err := xpath.ToGNMIPath(xp)
 		if err != nil {
 			return err
@@ -198,36 +268,21 @@ func (r *reconciler) reconcileDelete(ctx context.Context, resource *ygotnddp.Ndd
 			if e, ok := status.FromError(err); ok {
 				switch e.Code() {
 				case codes.ResourceExhausted:
-					log.Debug("gnmi delate failed exhausted", "error", err)
-					if err := r.setExhausted(60); err != nil {
+					log.Debug("gnmi delete failed exhausted", "error", err)
+					if err := r.cache.SetSystemExhausted(crSystemDeviceName, 60); err != nil {
 						return err
 					}
-					// we return and keep the status as is since we can retry once the device is back in normal state
-					return nil
 				}
 			}
 			log.Debug("gnmi delete failed", "Paths", delPaths, "Error", err)
-			// update failed, update resource status in the system cache
-			if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
-				return err
-			}
 			// we only process 1 resource at the time
 			return err
 
 		}
-		// delete resources from the system cache
-		if err := r.cache.DeleteSystemResource(crSystemDeviceName, *resource.Name); err != nil {
-			return err
-		}
+		// the status will be set in the reconciler
+		log.Debug("gnmi delete success", "Paths", delPaths)
+		return nil
 	}
-	return nil
-}
-
-func (r *reconciler) PrintResourceList(idx int) error {
-	resourceListRaw, err := r.getResourceListRaw()
-	if err != nil {
-		return err
-	}
-	r.log.Debug("resourceList", "idx", idx, "raw", resourceListRaw)
-	return nil
+	// the status will be set in the reconciler result
+	return fmt.Errorf("deleting a resource with no valid paths murder: %t, resourcePaths %v, delPaths: %v", murder, resource.Path, delPaths)
 }
