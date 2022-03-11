@@ -11,7 +11,7 @@ type Schema interface {
 	// methods chidren
 	NewDevice(c resource.ClientApplicator, name string) Device
 	GetDevices() map[string]Device
-	Print()
+	Print(string)
 	// methods schema
 	Deploy(ctx context.Context, mg resource.Managed, labels map[string]string) error
 	Destroy(ctx context.Context, mg resource.Managed, labels map[string]string) error
@@ -51,8 +51,8 @@ func (x *schema) GetDevices() map[string]Device {
 	return x.devices
 }
 
-func (x *schema) Print() {
-	fmt.Println("schema information")
+func (x *schema) Print(crName string) {
+	fmt.Printf("schema information: %s\n", crName)
 	for _, d := range x.GetDevices() {
 		d.Print()
 	}
