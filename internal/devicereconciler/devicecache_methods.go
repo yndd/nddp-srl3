@@ -56,17 +56,14 @@ func (r *reconciler) validateCreate(resource *ygotnddp.NddpSystem_Gvk) (ygot.Val
 func (r *reconciler) validateDelete(paths []*gnmi.Path) error {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 
-	_, err := r.cache.ValidateDelete(crDeviceName, paths)
-
-	return err
+	return r.cache.ValidateDelete(crDeviceName, paths, false)
 }
 
 // validateUpdate updates the current config/goStruct and validates the result
 func (r *reconciler) validateUpdate(updates []*gnmi.Update, jsonietf bool) error {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 
-	_, err := r.cache.ValidateUpdate(crDeviceName, updates, false, jsonietf)
-	return err
+	return r.cache.ValidateUpdate(crDeviceName, updates, false, jsonietf, false)
 }
 
 /* we dont want to do a double diff, once in the controller and 2nd in the reconciler

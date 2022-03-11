@@ -61,13 +61,12 @@ func (s *server) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.SetRespon
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 		*/
-		nddpGoStruct, err := s.cache.ValidateUpdate(target, req.GetReplace(), true, false)
-		if err != nil {
+		if err := s.cache.ValidateUpdate(target, req.GetReplace(), true, false, true); err != nil {
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 
 		//log.Debug("Set Replace", "GoStruct", nddpGoStruct)
-		s.cache.UpdateValidatedGoStruct(target, nddpGoStruct)
+		//s.cache.UpdateValidatedGoStruct(target, nddpGoStruct)
 
 		/*
 			if err := s.UpdateCache(prefix, u); err != nil {

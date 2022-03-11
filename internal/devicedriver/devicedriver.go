@@ -516,7 +516,7 @@ func (ddd *deviceInfo) ygotDeviceCallback(c ygot.ValidatedGoStruct) error { // A
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 	ddd.log.Debug("ygotDeviceCallback updateValidatedGoStruct", "crDeviceName", crDeviceName)
 
-	ddd.cache.UpdateValidatedGoStruct(crDeviceName, c)
+	ddd.cache.UpdateValidatedGoStruct(crDeviceName, c, false)
 
 	// we dont validate the cache
 	ns, err := ygot.TogNMINotifications(ddd.cache.GetValidatedGoStruct(crDeviceName), time.Now().UnixNano(), ygot.GNMINotificationsConfig{
@@ -584,7 +584,7 @@ func (ddd *deviceInfo) ygotSystemCallback(c ygot.ValidatedGoStruct) error { // A
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	ddd.cache.UpdateValidatedGoStruct(crSystemDeviceName, c)
+	ddd.cache.UpdateValidatedGoStruct(crSystemDeviceName, c, false)
 
 	// we dont validate the cache
 	/*

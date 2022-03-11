@@ -63,12 +63,16 @@ func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 		*/
 		//log.Debug("resourceList", "list", resourceList)
 
+		// check read/write maps
+
 		// handle deletes
 		if err := c.handleDeletes(crDeviceName, resourceList, resp.GetUpdate().Delete); err != nil {
+			log.Debug("handleDeletes", "error", err)
 			return err
 		}
 
 		if err := c.handleUpdates(crDeviceName, resourceList, resp.GetUpdate().Update); err != nil {
+			log.Debug("handleUpdates", "error", err)
 			return err
 		}
 
@@ -87,17 +91,9 @@ func (c *collector) handleDeletes(crDeviceName string, resourceList map[string]*
 			}
 		*/
 		// validate deletes
-		goStruct, err := c.cache.ValidateDelete(crDeviceName, delPaths)
-		if err != nil {
+		if err := c.cache.ValidateDelete(crDeviceName, delPaths, true); err != nil {
 			return err
 		}
-		if goStruct == nil {
-			//c.log.Debug("handleDeletes UpdateValidatedGoStruct", "deviceName", crDeviceName, "goStruct", goStruct, "delPaths", delPaths)
-			return errors.New("subscription handler handleDeletes suicide empty goStruct")
-		}
-		// update the config with the new struct
-		//c.log.Debug("UpdateValidatedGoStruct", "goStruct", goStruct, "delPaths", delPaths)
-		c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
 
 		// trigger reconcile event, but group them to avoid multiple reconciliation triggers
 		resourceNames := map[string]string{}
@@ -128,17 +124,9 @@ func (c *collector) handleUpdates(crDeviceName string, resourceList map[string]*
 		*/
 
 		// validate updates
-		goStruct, err := c.cache.ValidateUpdate(crDeviceName, updates, false, true)
-		if err != nil {
+		if err := c.cache.ValidateUpdate(crDeviceName, updates, false, true, true); err != nil {
 			return err
 		}
-		// update the config with the new struct
-		if goStruct == nil {
-			//c.log.Debug("handleUpdates UpdateValidatedGoStruct", "deviceName", crDeviceName, "goStruct", goStruct, "updates", updates)
-			return errors.New("subscription handler handleUpdates suicide empty goStruct")
-		}
-
-		c.cache.UpdateValidatedGoStruct(crDeviceName, goStruct)
 
 		// check of we need to trigger a reconcile event
 		resourceNames := map[string]string{}
@@ -441,4 +429,22 @@ func addListValue(d interface{}, e string, k map[string]string, val *gnmi.TypedV
 		}
 	}
 	return d, nil
+}
+
+func cleanPath(path *gnmi.Path) *gnmi.Path {
+	// clean the path for now to remove the module information from the pathElem
+	p := yparser.DeepCopyGnmiPath(path)
+	for _, pe := range p.GetElem() {
+		pe.Name = strings.Split(pe.Name, ":")[len(strings.Split(pe.Name, ":"))-1]
+		keys := make(map[string]string)
+		for k, v := range pe.GetKey() {
+			if strings.Contains(v, "::") {
+				keys[strings.Split(k, ":")[len(strings.Split(k, ":"))-1]] = v
+			} else {
+				keys[strings.Split(k, ":")[len(strings.Split(k, ":"))-1]] = strings.Split(v, ":")[len(strings.Split(v, ":"))-1]
+			}
+		}
+		pe.Key = keys
+	}
+	return p
 }

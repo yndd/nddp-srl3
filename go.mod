@@ -124,6 +124,7 @@ require (
 	github.com/ugorji/go/codec v1.2.6 // indirect
 	github.com/wI2L/jsondiff v0.1.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.1 // indirect
+	github.com/yndd/ndda-network v0.0.10 // indirect
 	github.com/zealic/xignore v0.3.3 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.opencensus.io v0.23.0 // indirect

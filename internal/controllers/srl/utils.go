@@ -285,6 +285,12 @@ func (e *externalDevice) processObserve(crRootPaths []string, crHierPaths map[st
 		return &observe{hasData: false}, nil
 	}
 
+	b, err := json.Marshal(x)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("Process Observe: %s\n", string(b))
+
 	deletes := []*gnmi.Path{}
 	updates := []*gnmi.Update{}
 	upToDate := true
