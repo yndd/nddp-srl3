@@ -171,12 +171,14 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 	if err != nil {
 		return nil, err
 	}
-	x.Print()
+	//x.Print()
 
-	var d *srlv1alpha1.Device
+	var d srlv1alpha1.Device
 	if err := json.Unmarshal([]byte(j), &d); err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("epg device: %s, device config: %v\n", deviceName, d)
 
 	return &srlv1alpha1.Srl3Device{
 		ObjectMeta: metav1.ObjectMeta{
@@ -191,7 +193,7 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 					Name: deviceName,
 				},
 			},
-			Device: d,
+			Device: &d,
 		},
 	}, nil
 }
