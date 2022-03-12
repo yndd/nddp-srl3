@@ -167,6 +167,7 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 
 	j, err := ygot.EmitJSON(x.device, &ygot.EmitJSONConfig{
 		Format: ygot.RFC7951,
+		SkipValidation: true,
 	})
 	if err != nil {
 		return nil, err
@@ -178,7 +179,6 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 		return nil, err
 	}
 
-	fmt.Printf("epg device: %s, device config: %#v\n", deviceName, d.System.Networkinstance.Protocols.Evpn.Ethernetsegments.Bgpinstance[0].Ethernetsegment)
 
 	return &srlv1alpha1.Srl3Device{
 		ObjectMeta: metav1.ObjectMeta{
