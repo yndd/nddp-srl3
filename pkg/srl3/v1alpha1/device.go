@@ -70,8 +70,9 @@ func (x *device) Get() *ygotsrl.Device {
 
 func (x *device) Print() error {
 	deviceJsonConfig, err := ygot.EmitJSON(x.device, &ygot.EmitJSONConfig{
-		Format:        ygot.RFC7951,
-		RFC7951Config: &ygot.RFC7951JSONConfig{},
+		Format:         ygot.RFC7951,
+		RFC7951Config:  &ygot.RFC7951JSONConfig{},
+		SkipValidation: true,
 	})
 	if err != nil {
 		return err
@@ -166,19 +167,18 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 	}
 
 	j, err := ygot.EmitJSON(x.device, &ygot.EmitJSONConfig{
-		Format: ygot.RFC7951,
+		Format:         ygot.RFC7951,
 		SkipValidation: true,
 	})
 	if err != nil {
 		return nil, err
 	}
-	//x.Print()
+	x.Print()
 
 	var d srlv1alpha1.Device
 	if err := json.Unmarshal([]byte(j), &d); err != nil {
 		return nil, err
 	}
-
 
 	return &srlv1alpha1.Srl3Device{
 		ObjectMeta: metav1.ObjectMeta{
