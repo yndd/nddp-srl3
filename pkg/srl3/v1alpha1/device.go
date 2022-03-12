@@ -2,7 +2,7 @@ package srl3
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -165,14 +165,16 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 		namespace = "default"
 	}
 
-	var d interface{}
-	d, err := ygot.ConstructIETFJSON(x.device, &ygot.RFC7951JSONConfig{})
+	j, err := ygot.EmitJSON(x.device, &ygot.EmitJSONConfig{
+		Format: ygot.RFC7951,
+	})
 	if err != nil {
 		return nil, err
 	}
-	device, ok := d.(srlv1alpha1.Device)
-	if !ok {
-		return nil, errors.New("wrong device object")
+
+	var d *srlv1alpha1.Device
+	if err := json.Unmarshal([]byte(j), &d); err != nil {
+		return nil, err
 	}
 
 	return &srlv1alpha1.Srl3Device{
@@ -188,7 +190,7 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 					Name: deviceName,
 				},
 			},
-			Device: &device,
+			Device: d,
 		},
 	}, nil
 }
