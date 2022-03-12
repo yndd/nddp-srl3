@@ -24421,7 +24421,7 @@ func (in *DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstance) D
 	}
 	if in.Id != nil {
 		in, out := &in.Id, &out.Id
-		*out = new(string)
+		*out = new(uint8)
 		**out = **in
 	}
 }
