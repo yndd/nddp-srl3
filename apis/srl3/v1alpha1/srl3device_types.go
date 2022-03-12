@@ -9498,8 +9498,8 @@ type DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegments struct {
 type DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstance struct {
 	//+kubebuilder:validation:MinItems=0
 	//+kubebuilder:validation:MaxItems=128
-	Esi []*DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegment `json:"esi,omitempty"`
-	Id  *uint8                                                                                `json:"id"`
+	Ethernetsegment []*DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegment `json:"ethernet-segment,omitempty"`
+	Id              *uint8                                                                                `json:"id"`
 }
 
 // DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegment struct
