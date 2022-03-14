@@ -350,6 +350,14 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 				// if the specs are not equal follow the regular procedure
 				//log.Debug("observing when using gnmic: resource failed")
 				// TODO
+				return managed.ExternalObservation{
+					Ready:      true,
+					Exists:     true,
+					Pending:    false,
+					Failed:     true,
+					HasData:    false,
+					IsUpToDate: false,
+				}, nil
 				/*
 					failedObserve, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
 					if err != nil {
@@ -384,6 +392,7 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 
 	observe, err := e.processObserve(mg.GetRootPaths(), mg.GetHierPaths(), *cr.Spec.Device, resp)
 	if err != nil {
+		log.Debug("Observe Response", "error", err)
 		if strings.Contains(err.Error(), "not found") {
 			return managed.ExternalObservation{
 				Ready:      true,

@@ -103,16 +103,17 @@ func (r *reconciler) handlePendingResources() error {
 	return nil
 }
 
-func (r *reconciler) updateResourceStatus(resource *ygotnddp.NddpSystem_Gvk, err error) error {
+func (r *reconciler) updateResourceStatus(resource *ygotnddp.NddpSystem_Gvk, reconcileErr error) error {
 	log := r.log.WithValues("target", r.target.Config.Name, "address", r.target.Config.Address)
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
-	if err != nil {
+	log.Debug("reconcile updateResourceStatus", "resource", *resource.Name, "err", reconcileErr)
+	if reconcileErr != nil {
 		// transaction failed
-		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, err.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
+		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, reconcileErr.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
 			return err
 		}
-		r.log.Debug("reconciler error", "error", err)
+		r.log.Debug("reconciler error", "error", reconcileErr)
 		return nil
 	}
 	// transaction succeeded
@@ -139,12 +140,16 @@ func (r *reconciler) reconcileCreate(ctx context.Context, resource *ygotnddp.Ndd
 	newGoStruct, err := r.validateCreate(resource)
 	if err != nil {
 		log.Debug("validation failed", "error", err)
+		return err
 	}
 	j, err := ygot.EmitJSON(newGoStruct, &ygot.EmitJSONConfig{
-		Format: ygot.RFC7951,
-		//Indent:        "",
-		RFC7951Config: &ygot.RFC7951JSONConfig{},
+		Format:         ygot.RFC7951,
+		RFC7951Config:  &ygot.RFC7951JSONConfig{},
+		SkipValidation: true,
 	})
+	if err != nil {
+		return err
+	}
 
 	log.Debug("json update", "json", j)
 

@@ -3,6 +3,7 @@ package srl
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
@@ -120,10 +121,26 @@ func findNextKeyedListEntry(rootPath *gnmi.Path, curNode interface{}, schema *ya
 				switch kv := nextNode[keyName].(type) {
 				case string:
 					nextNodeKeyValue = string(kv)
+				case uint8:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case uint16:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
 				case uint32:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case uint64:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int8:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int16:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int32:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int64:
 					nextNodeKeyValue = strconv.Itoa(int(kv))
 				case float64:
 					nextNodeKeyValue = fmt.Sprintf("%.0f", kv)
+				default:
+					fmt.Printf("findNextKeyedListEntry: type %v\n", reflect.TypeOf(nextNode[keyName]))
 				}
 				if nextNodeKeyValue != keyValue {
 					found = false
@@ -250,18 +267,36 @@ func getNextKeyedListEntry(rootPath *gnmi.Path, curNode interface{}, schema *yan
 				return nil, fmt.Errorf("getSpecNextKeyedListEntry nextNode wrong node type: %v", nextNode)
 			}
 			found = true
+			fmt.Printf("rootPath Key: %v\n", rootPath.GetElem()[0].GetKey())
 			for keyName, keyValue := range rootPath.GetElem()[0].GetKey() {
-				//fmt.Printf("keyName: %s, keyValue: %s \n", keyName, keyValue)
-				//fmt.Printf("nextNode:: %s \n", nextNode[keyName])
+				fmt.Printf("keyName: %s, keyValue: %s \n", keyName, keyValue)
+				fmt.Printf("nextNode: %s \n", nextNode[keyName])
 				var nextNodeKeyValue string
 				switch kv := nextNode[keyName].(type) {
 				case string:
 					nextNodeKeyValue = string(kv)
+				case uint8:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case uint16:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
 				case uint32:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case uint64:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int8:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int16:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int32:
+					nextNodeKeyValue = strconv.Itoa(int(kv))
+				case int64:
 					nextNodeKeyValue = strconv.Itoa(int(kv))
 				case float64:
 					nextNodeKeyValue = fmt.Sprintf("%.0f", kv)
+				default:
+					fmt.Printf("getNextKeyedListEntry: type %v\n", reflect.TypeOf(nextNode[keyName]))
 				}
+				fmt.Printf("nextNodeKeyValue: %s, keyValue: %s \n", nextNodeKeyValue, keyValue)
 				if nextNodeKeyValue != keyValue {
 					found = false
 					break

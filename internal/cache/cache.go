@@ -148,27 +148,45 @@ func (c *cache) ValidateCreate(target string, x interface{}) (ygot.ValidatedGoSt
 
 	curGoStruct := c.GetValidatedGoStruct(target)
 
-	fmt.Printf("ValidateCreate target: %s data: %v\n", target, x)
+	fmt.Printf("ValidateCreate: target: %s data: %v\n", target, x)
 	newConfig, err := json.Marshal(x)
 	if err != nil {
+		fmt.Printf("ValidateCreate: Marshal error %s\n", err.Error())
 		return nil, err
 	}
 
-	fmt.Println(string(newConfig))
+	//fmt.Printf("ValidateCreate: New Config %s\n", string(newConfig))
 
-	newGoStruct, err := m.NewConfigStruct(newConfig, true)
+	newGoStruct, err := m.NewConfigStruct(newConfig, false)
 	if err != nil {
+		fmt.Printf("ValidateCreate: NewConfigStruct error %s\n", err.Error())
 		return nil, err
 	}
 
 	if err := ygot.MergeStructInto(curGoStruct, newGoStruct, &ygot.MergeOverwriteExistingFields{}); err != nil {
+		fmt.Printf("ValidateCreate: MergeStructInto error %s\n", err.Error())
 		return nil, err
 	}
+	/*
+		j, err := ygot.EmitJSON(curGoStruct, &ygot.EmitJSONConfig{
+			Format:         ygot.RFC7951,
+			SkipValidation: true,
+		})
+		if err != nil {
+			fmt.Printf("ValidateCreate: EmitJSON error %s\n", err.Error())
+			return nil, err
+		}
 
-	if err := curGoStruct.(ygot.ValidatedGoStruct).Validate(); err != nil {
+		fmt.Println("json newConfig start")
+		fmt.Println(j)
+		fmt.Println("json newConfig end")
+	*/
+
+	if err := curGoStruct.Validate(); err != nil {
+		fmt.Printf("ValidateCreate: validation error %s\n", err.Error())
 		return nil, err
 	}
-
+	fmt.Printf("ValidateCreate: all good\n")
 	return newGoStruct, nil
 }
 

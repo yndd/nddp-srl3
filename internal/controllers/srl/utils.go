@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/gnxi/utils/xpath"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/goyang/pkg/yang"
 	"github.com/openconfig/ygot/ygot"
@@ -247,7 +246,7 @@ func getHierPaths(mg resource.Managed, crPaths []*gnmi.Path, resourceList map[st
 								hierPaths[crXpath] = make([]*gnmi.Path, 0)
 							}
 							//hPath, err := xpath.ToGNMIPath(strings.TrimPrefix(resourcePath, crXpath))
-							hPath, err := xpath.ToGNMIPath(resourcePath)
+							hPath, err := yparser.ToGNMIPath(resourcePath)
 							if err != nil {
 								return nil, err
 							}
@@ -296,6 +295,7 @@ func (e *externalDevice) processObserve(crRootPaths []string, crHierPaths map[st
 	upToDate := true
 	// for each path perform the diff between the spec and resp data
 	for _, crRootPath := range crRootPaths {
+		fmt.Printf("Process Observe: %s\n", crRootPath)
 		// deepcopy the spec data to avoid data manipulation of the spec
 		j, err := DeepCopy(specData)
 		if err != nil {
@@ -304,10 +304,16 @@ func (e *externalDevice) processObserve(crRootPaths []string, crHierPaths map[st
 
 		// spec Data pre-processing
 		// remove all non relevant data from the spec based on the crPath
-		crPath, err := xpath.ToGNMIPath(crRootPath)
+		crPath, err := yparser.ToGNMIPath(crRootPath)
 		if err != nil {
 			return &observe{hasData: false}, nil
 		}
+		/*
+			crPath, err := xpath.ToGNMIPath(crRootPath)
+			if err != nil {
+				return &observe{hasData: false}, nil
+			}
+		*/
 		specGoStruct, err := e.getGoStructFromPath(crPath, j)
 		if err != nil {
 			return nil, errors.Wrap(err, "error processObserve getSpecDataFromPath")
@@ -336,7 +342,7 @@ func (e *externalDevice) processObserve(crRootPaths []string, crHierPaths map[st
 			if hPaths, ok := crHierPaths[crRootPath]; ok {
 				// remove hierarchical paths
 				for _, hPath := range hPaths {
-					crhPath, err := xpath.ToGNMIPath(hPath)
+					crhPath, err := yparser.ToGNMIPath(hPath)
 					if err != nil {
 						return &observe{hasData: false}, nil
 					}

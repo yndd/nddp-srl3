@@ -1693,7 +1693,7 @@ type DeviceInterfaceRadioRoeEthernetlink struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}`
 	Remotemacaddress *string `json:"remote-mac-address,omitempty"`
-	Subinterface     *string `json:"subinterface,omitempty"`
+	Subinterface     *uint32 `json:"subinterface,omitempty"`
 	// kubebuilder:validation:Minimum=1
 	// kubebuilder:validation:Maximum=4094
 	Vlanid *uint16 `json:"vlan-id,omitempty"`
@@ -2679,6 +2679,7 @@ type DeviceInterfaceSubinterfaceVlanEncap struct {
 
 // DeviceInterfaceSubinterfaceVlanEncapSingletagged struct
 type DeviceInterfaceSubinterfaceVlanEncapSingletagged struct {
+	// +kubebuilder:validation:XIntOrString
 	Vlanid *uint16 `json:"vlan-id,omitempty"`
 }
 
@@ -4112,7 +4113,7 @@ type DeviceNetworkinstanceProtocolsBgpevpnBgpinstance struct {
 	// kubebuilder:validation:Minimum=1
 	// kubebuilder:validation:Maximum=65535
 	Evi *uint32 `json:"evi"`
-	Id  *string `json:"id"`
+	Id  *uint8  `json:"id"`
 	//RootNetworkinstanceProtocolsBgpevpnBgpinstanceRoutes
 	Routes         *DeviceNetworkinstanceProtocolsBgpevpnBgpinstanceRoutes `json:"routes,omitempty"`
 	Vxlaninterface *string                                                 `json:"vxlan-interface,omitempty"`
@@ -6465,8 +6466,8 @@ type DeviceOamEthcfmDomainAssociationMepPmonOnewaydm struct {
 type DeviceOamEthcfmDomainAssociationMepPmonOnewaydmSession struct {
 	// +kubebuilder:default:=false
 	Adminstate *bool `json:"admin-state,omitempty"`
-	// +kubebuilder:default:="1"
-	Bingroup *string `json:"bin-group,omitempty"`
+	// +kubebuilder:default:=1
+	Bingroup *uint32 `json:"bin-group,omitempty"`
 	// kubebuilder:validation:Minimum=64
 	// kubebuilder:validation:Maximum=9600
 	// +kubebuilder:default:=64
@@ -6475,8 +6476,8 @@ type DeviceOamEthcfmDomainAssociationMepPmonOnewaydmSession struct {
 	// kubebuilder:validation:Maximum=3600000
 	// +kubebuilder:default:=100
 	Interval *uint32 `json:"interval,omitempty"`
-	// +kubebuilder:default:="1"
-	Measurementinterval *string `json:"measurement-interval,omitempty"`
+	// +kubebuilder:default:=1
+	Measurementinterval *uint32 `json:"measurement-interval,omitempty"`
 	// kubebuilder:validation:Minimum=0
 	// kubebuilder:validation:Maximum=7
 	// +kubebuilder:default:=7
@@ -6502,8 +6503,8 @@ type DeviceOamEthcfmDomainAssociationMepPmonTwowaydm struct {
 type DeviceOamEthcfmDomainAssociationMepPmonTwowaydmSession struct {
 	// +kubebuilder:default:=false
 	Adminstate *bool `json:"admin-state,omitempty"`
-	// +kubebuilder:default:="1"
-	Bingroup *string `json:"bin-group,omitempty"`
+	// +kubebuilder:default:=1
+	Bingroup *uint32 `json:"bin-group,omitempty"`
 	// kubebuilder:validation:Minimum=64
 	// kubebuilder:validation:Maximum=9600
 	// +kubebuilder:default:=64
@@ -6512,8 +6513,8 @@ type DeviceOamEthcfmDomainAssociationMepPmonTwowaydmSession struct {
 	// kubebuilder:validation:Maximum=3600000
 	// +kubebuilder:default:=100
 	Interval *uint32 `json:"interval,omitempty"`
-	// +kubebuilder:default:="1"
-	Measurementinterval *string `json:"measurement-interval,omitempty"`
+	// +kubebuilder:default:=1
+	Measurementinterval *uint32 `json:"measurement-interval,omitempty"`
 	// kubebuilder:validation:Minimum=0
 	// kubebuilder:validation:Maximum=7
 	// +kubebuilder:default:=7
@@ -6557,8 +6558,8 @@ type DeviceOamEthcfmDomainAssociationMepPmonTwowayslmSession struct {
 	Interval *uint32 `json:"interval,omitempty"`
 	//RootOamEthcfmDomainAssociationMepPmonTwowayslmSessionLossevent
 	Lossevent *DeviceOamEthcfmDomainAssociationMepPmonTwowayslmSessionLossevent `json:"loss-event,omitempty"`
-	// +kubebuilder:default:="1"
-	Measurementinterval *string `json:"measurement-interval,omitempty"`
+	// +kubebuilder:default:=1
+	Measurementinterval *uint32 `json:"measurement-interval,omitempty"`
 	// kubebuilder:validation:Minimum=0
 	// kubebuilder:validation:Maximum=7
 	// +kubebuilder:default:=7
@@ -8053,8 +8054,9 @@ type DeviceSystemConfigurationRole struct {
 // DeviceSystemConfigurationRoleRule struct
 type DeviceSystemConfigurationRoleRule struct {
 	// +kubebuilder:validation:Enum=`deny`;`read`;`write`
-	Action        E_DeviceSystemConfigurationRoleRuleAction `json:"action,omitempty"`
-	Pathreference *string                                   `json:"path-reference"`
+	Action E_DeviceSystemConfigurationRoleRuleAction `json:"action,omitempty"`
+	// +kubebuilder:validation:Required
+	Pathreference *string `json:"path-reference"`
 }
 
 // DeviceSystemDhcpserver struct
@@ -9581,7 +9583,7 @@ type DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernet
 // DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutes struct
 type DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutes struct {
 	//RootSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutesEthernetsegment
-	Esi *DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutesEthernetsegment `json:"esi,omitempty"`
+	Ethernetsegment *DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutesEthernetsegment `json:"ethernet-segment,omitempty"`
 	// +kubebuilder:validation:Enum=`use-system-ipv4-address`
 	// +kubebuilder:default:="use-system-ipv4-address"
 	Nexthop E_DeviceSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutesNexthop `json:"next-hop,omitempty"`

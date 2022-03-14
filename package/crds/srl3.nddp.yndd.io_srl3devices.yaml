@@ -1,5 +1,5 @@
 
-
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1804,7 +1804,8 @@ spec:
                                         pattern: '[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}'
                                         type: string
                                       subinterface:
-                                        type: string
+                                        format: int32
+                                        type: integer
                                       vlan-id:
                                         description: kubebuilder:validation:Minimum=1
                                           kubebuilder:validation:Maximum=4094
@@ -4584,7 +4585,7 @@ spec:
                                         format: int32
                                         type: integer
                                       id:
-                                        type: string
+                                        type: integer
                                       routes:
                                         description: RootNetworkinstanceProtocolsBgpevpnBgpinstanceRoutes
                                         properties:
@@ -7445,8 +7446,9 @@ spec:
                                                             default: false
                                                             type: boolean
                                                           bin-group:
-                                                            default: "1"
-                                                            type: string
+                                                            default: 1
+                                                            format: int32
+                                                            type: integer
                                                           frame-size:
                                                             default: 64
                                                             description: kubebuilder:validation:Minimum=64
@@ -7460,8 +7462,9 @@ spec:
                                                             format: int32
                                                             type: integer
                                                           measurement-interval:
-                                                            default: "1"
-                                                            type: string
+                                                            default: 1
+                                                            format: int32
+                                                            type: integer
                                                           priority:
                                                             default: 7
                                                             description: kubebuilder:validation:Minimum=0
@@ -7497,8 +7500,9 @@ spec:
                                                             default: false
                                                             type: boolean
                                                           bin-group:
-                                                            default: "1"
-                                                            type: string
+                                                            default: 1
+                                                            format: int32
+                                                            type: integer
                                                           frame-size:
                                                             default: 64
                                                             description: kubebuilder:validation:Minimum=64
@@ -7512,8 +7516,9 @@ spec:
                                                             format: int32
                                                             type: integer
                                                           measurement-interval:
-                                                            default: "1"
-                                                            type: string
+                                                            default: 1
+                                                            format: int32
+                                                            type: integer
                                                           priority:
                                                             default: 7
                                                             description: kubebuilder:validation:Minimum=0
@@ -7681,8 +7686,9 @@ spec:
                                                                 type: array
                                                             type: object
                                                           measurement-interval:
-                                                            default: "1"
-                                                            type: string
+                                                            default: 1
+                                                            format: int32
+                                                            type: integer
                                                           priority:
                                                             default: 7
                                                             description: kubebuilder:validation:Minimum=0
@@ -11884,7 +11890,7 @@ spec:
                                                   routes:
                                                     description: RootSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutes
                                                     properties:
-                                                      esi:
+                                                      ethernet-segment:
                                                         description: RootSystemNetworkinstanceProtocolsEvpnEthernetsegmentsBgpinstanceEthernetsegmentRoutesEthernetsegment
                                                         properties:
                                                           originating-ip:

@@ -23,8 +23,10 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/stoewer/go-strcase v1.2.0
 	github.com/yndd/ndd-core v0.1.7
-	github.com/yndd/ndd-yang v0.2.0
+	github.com/yndd/ndd-yang v0.2.7
+	github.com/yndd/ndda-network v0.1.35
 	github.com/yndd/nddo-runtime v0.0.72
+	github.com/yndd/nddp-srl v0.0.30
 	github.com/yndd/nddp-system v0.2.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.22.2
@@ -124,7 +126,6 @@ require (
 	github.com/ugorji/go/codec v1.2.6 // indirect
 	github.com/wI2L/jsondiff v0.1.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.1 // indirect
-	github.com/yndd/ndda-network v0.0.10 // indirect
 	github.com/zealic/xignore v0.3.3 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.opencensus.io v0.23.0 // indirect
