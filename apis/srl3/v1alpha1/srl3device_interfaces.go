@@ -57,6 +57,8 @@ type IFSrl3Device interface {
 	GetOrganization() string
 	GetDeployment() string
 	GetAvailabilityZone() string
+	// Spec
+	GetSpec() *DeviceSpec
 }
 
 func (x *Srl3Device) GetOwner() string {
@@ -113,4 +115,8 @@ func (x *Srl3Device) GetAvailabilityZone() string {
 	} else {
 		return s
 	}
+}
+
+func (x *Srl3Device) GetSpec() *DeviceSpec {
+	return &x.Spec
 }
