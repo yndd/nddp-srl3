@@ -104,7 +104,7 @@ func (x *selectedNodeItfces) GetNodeItfcesByEpgSelector(epgSelectors []*nddov1.E
 	for _, d := range nddaDeviceList.GetDevices() {
 		if d.GetSpec().Device.Interface != nil {
 			for _, i := range d.GetSpec().Device.Interface {
-				fmt.Printf("getNodeItfcesByEpgSelector: itfceepg: %s, nodename: %s, itfcename: %s, lagmember: %v\n", d.GetEndpointGroup(), d.GetDeviceName(), *i.Name, *i.Lag)
+				fmt.Printf("getNodeItfcesByEpgSelector: itfceepg: %s, nodename: %s, itfcename: %s\n", d.GetEndpointGroup(), d.GetDeviceName(), *i.Name)
 				for _, epgSelector := range epgSelectors {
 					if epgSelector.EpgName != "" && epgSelector.EpgName == d.GetEndpointGroup() {
 						fmt.Printf("getNodeItfcesByEpgSelector: %s\n", d.GetName())
@@ -130,7 +130,7 @@ func (x *selectedNodeItfces) GetNodeItfcesByNodeItfceSelector(nodeItfceSelectors
 		if d.GetSpec().Device.Interface != nil {
 			for _, i := range d.GetSpec().Device.Interface {
 				for deviceName, itfceInfo := range nodeItfceSelectors {
-					fmt.Printf("getNodeItfcesByNodeItfceSelector: nodename: %s, itfcename: %s, lagmember: %v, nodename: %s\n", d.GetDeviceName(), *i.Name, *i.Lag, deviceName)
+					fmt.Printf("getNodeItfcesByNodeItfceSelector: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
 
 					var itfceName string
 					if strings.Contains(itfceInfo.ItfceName, "lag") {
