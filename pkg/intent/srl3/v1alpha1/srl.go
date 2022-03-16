@@ -3,7 +3,6 @@ package v1alpha1
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -19,9 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func InitSrl(c resource.ClientApplicator, p intent.Intent, name string) intent.Instance {
+func InitSrl(c resource.ClientApplicator, p intent.Intent, name string) intent.Intent {
 	newDeviceList := func() srlv1alpha1.IFSrl3DeviceList { return &srlv1alpha1.Srl3DeviceList{} }
-	return &device{
+	return &srlintent{
 		client:        c,
 		name:          name,
 		parent:        p,
@@ -29,7 +28,7 @@ func InitSrl(c resource.ClientApplicator, p intent.Intent, name string) intent.I
 	}
 }
 
-type device struct {
+type srlintent struct {
 	// k8s client
 	client resource.ClientApplicator
 	// key
@@ -42,24 +41,11 @@ type device struct {
 	newDeviceList func() srlv1alpha1.IFSrl3DeviceList
 }
 
-func (x *device) Get() interface{} {
+func (x *srlintent) GetData() interface{} {
 	return x.device
 }
 
-func (x *device) Print() error {
-	deviceJsonConfig, err := ygot.EmitJSON(x.device, &ygot.EmitJSONConfig{
-		Format:         ygot.RFC7951,
-		RFC7951Config:  &ygot.RFC7951JSONConfig{},
-		SkipValidation: true,
-	})
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Device: %s \n config: %s\n", x.name, deviceJsonConfig)
-	return nil
-}
-
-func (x *device) Deploy(ctx context.Context, mg resource.Managed, labels map[string]string) error {
+func (x *srlintent) Deploy(ctx context.Context, mg resource.Managed, labels map[string]string) error {
 	cr, err := x.buildCR(mg, x.name, labels)
 	if err != nil {
 		return err
@@ -67,7 +53,7 @@ func (x *device) Deploy(ctx context.Context, mg resource.Managed, labels map[str
 	return x.client.Apply(ctx, cr)
 }
 
-func (x *device) Destroy(ctx context.Context, mg resource.Managed, labels map[string]string) error {
+func (x *srlintent) Destroy(ctx context.Context, mg resource.Managed, labels map[string]string) error {
 	cr, err := x.buildCR(mg, x.name, labels)
 	if err != nil {
 		return err
@@ -75,7 +61,7 @@ func (x *device) Destroy(ctx context.Context, mg resource.Managed, labels map[st
 	return x.client.Delete(ctx, cr)
 }
 
-func (x *device) List(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
+func (x *srlintent) List(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
 	// local CR list
 	opts := []client.ListOption{
 		client.MatchingLabels{srlv1alpha1.LabelNddaOwner: odns.GetOdnsResourceKindName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind))},
@@ -96,7 +82,7 @@ func (x *device) List(ctx context.Context, mg resource.Managed, resources map[st
 	return resources, nil
 }
 
-func (x *device) Validate(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
+func (x *srlintent) Validate(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
 	// local CR validation
 	resourceName := odns.GetOdnsResourceName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind),
 		[]string{
@@ -109,7 +95,7 @@ func (x *device) Validate(ctx context.Context, mg resource.Managed, resources ma
 	return resources, nil
 }
 
-func (x *device) Delete(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) error {
+func (x *srlintent) Delete(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) error {
 	// local CR deletion
 	if res, ok := resources[srlv1alpha1.DeviceKindKind]; ok {
 		for resName := range res {
@@ -127,7 +113,7 @@ func (x *device) Delete(ctx context.Context, mg resource.Managed, resources map[
 	return nil
 }
 
-func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[string]string) (*srlv1alpha1.Srl3Device, error) {
+func (x *srlintent) buildCR(mg resource.Managed, deviceName string, labels map[string]string) (*srlv1alpha1.Srl3Device, error) {
 	resourceName := odns.GetOdnsResourceName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind),
 		[]string{
 			//strings.ToLower(x.name),
@@ -151,7 +137,6 @@ func (x *device) buildCR(mg resource.Managed, deviceName string, labels map[stri
 	if err != nil {
 		return nil, err
 	}
-	x.Print()
 
 	var d srlv1alpha1.Device
 	if err := json.Unmarshal([]byte(j), &d); err != nil {
