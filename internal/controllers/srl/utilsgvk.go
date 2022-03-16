@@ -32,24 +32,6 @@ func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalOb
 	}
 
 	// get nddpData from gvkname, action, paths and spec
-
-	/*
-		nddpData := &ygotnddp.Device{
-			Gvk: map[string]*ygotnddp.NddpSystem_Gvk{
-				gvkName: {
-					Name:   ygot.String(gvkName),
-					Action: action,
-					Path:   getPaths(crPaths),
-					Status: getStatus(action),
-					Reason: ygot.String(""),
-					Spec:   spec,
-					Delete: getPaths(crDeletes),
-					Update: updates,
-				},
-			},
-		}
-	*/
-
 	gvkData := &ygotnddp.NddpSystem_Gvk{
 		Name:    ygot.String(gvkName),
 		Action:  action,
@@ -62,16 +44,12 @@ func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalOb
 		Attempt: ygot.Uint32(0),
 	}
 
-	/*
-		gvkJson, err := json.Marshal(gvkData)
-		if err != nil {
-			return nil, err
-		}
-	*/
-
 	nddpJson, err := ygot.EmitJSON(gvkData, &ygot.EmitJSONConfig{
 		Format: ygot.RFC7951,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	//return update
 	return []*gnmi.Update{

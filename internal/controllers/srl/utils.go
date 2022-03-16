@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-runtime/pkg/resource"
 	"github.com/yndd/ndd-yang/pkg/yparser"
+	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
 
 	//srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 
@@ -18,6 +19,13 @@ import (
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
+
+type observe struct {
+	hasData  bool
+	upToDate bool
+	deletes  []*gnmi.Path
+	updates  []*gnmi.Update
+}
 
 func (v *validatorDevice) getRootPaths(x interface{}) ([]*gnmi.Path, error) {
 	jsonTree, err := v.processData(x)
@@ -108,14 +116,14 @@ func getContainerEntry(paths []*gnmi.Path, curNode interface{}, elemName string,
 
 	//fmt.Printf("getContainerEntry container: %v\n", container)
 
-	hasData, hasContainer, err := hasDataAndOrContainer(container, schema)
+	_, hasContainer, err := hasDataAndOrContainer(container, schema)
 	if err != nil {
 		//fmt.Printf("getContainerEntry hasDataAndOrContainer: Error: %v\n", err)
 		return nil, err
 	}
-	if hasData {
-		//fmt.Printf("getContainerEntry hasData: ElemName: %s\n", schema.Name)
-	}
+	//if hasData {
+	//fmt.Printf("getContainerEntry hasData: ElemName: %s\n", schema.Name)
+	//}
 	if hasContainer {
 		//fmt.Printf("getContainerEntry hasContainer: ElemName: %s\n", schema.Name)
 		getChildNode(paths, container, schema, pathDepth+1, false)
@@ -237,27 +245,33 @@ func getHierPaths(mg resource.Managed, crPaths []*gnmi.Path, resourceList map[st
 	hierPaths := make(map[string][]*gnmi.Path, 0)
 	for _, crPath := range crPaths {
 		crXpath := yparser.GnmiPath2XPath(crPath, true)
-		if resourceList != nil {
-			for resourceName, resource := range resourceList {
-				if resourceName != gvkresource.GetGvkName(mg) {
-					for _, resourcePath := range resource.Path {
-						if strings.Contains(resourcePath, crXpath) {
-							if _, ok := hierPaths[crXpath]; !ok {
-								hierPaths[crXpath] = make([]*gnmi.Path, 0)
-							}
-							//hPath, err := xpath.ToGNMIPath(strings.TrimPrefix(resourcePath, crXpath))
-							hPath, err := yparser.ToGNMIPath(resourcePath)
-							if err != nil {
-								return nil, err
-							}
-							hierPaths[crXpath] = append(hierPaths[crXpath], hPath)
+		for resourceName, resource := range resourceList {
+			if resourceName != gvkresource.GetGvkName(mg) {
+				for _, resourcePath := range resource.Path {
+					if strings.Contains(resourcePath, crXpath) {
+						if _, ok := hierPaths[crXpath]; !ok {
+							hierPaths[crXpath] = make([]*gnmi.Path, 0)
 						}
+						//hPath, err := xpath.ToGNMIPath(strings.TrimPrefix(resourcePath, crXpath))
+						hPath, err := yparser.ToGNMIPath(resourcePath)
+						if err != nil {
+							return nil, err
+						}
+						hierPaths[crXpath] = append(hierPaths[crXpath], hPath)
 					}
 				}
 			}
 		}
 	}
 	return hierPaths, nil
+}
+
+func (e *externalDevice) getGoStruct(x interface{}) (ygot.ValidatedGoStruct, error) {
+	config, err := json.Marshal(x)
+	if err != nil {
+		return nil, err
+	}
+	return e.deviceModel.NewConfigStruct(config, false)
 }
 
 // 1. validate the repsonse to check if it contains the right # elements, data
@@ -284,131 +298,190 @@ func (e *externalDevice) processObserve(crRootPaths []string, crHierPaths map[st
 		return &observe{hasData: false}, nil
 	}
 
-	b, err := json.Marshal(x)
+	actualConfig, err := e.getGoStruct(x)
 	if err != nil {
-		return nil, err
+		return &observe{hasData: false}, err
 	}
-	fmt.Printf("Process Observe: %s\n", string(b))
 
-	deletes := []*gnmi.Path{}
-	updates := []*gnmi.Update{}
-	upToDate := true
-	// for each path perform the diff between the spec and resp data
-	for _, crRootPath := range crRootPaths {
-		fmt.Printf("Process Observe: %s\n", crRootPath)
-		// deepcopy the spec data to avoid data manipulation of the spec
-		j, err := DeepCopy(specData)
-		if err != nil {
-			return nil, errors.Wrap(err, "error processObserve processSpecData")
-		}
-
-		// spec Data pre-processing
-		// remove all non relevant data from the spec based on the crPath
-		crPath, err := yparser.ToGNMIPath(crRootPath)
-		if err != nil {
-			return &observe{hasData: false}, nil
-		}
-		/*
-			crPath, err := xpath.ToGNMIPath(crRootPath)
-			if err != nil {
-				return &observe{hasData: false}, nil
-			}
-		*/
-		specGoStruct, err := e.getGoStructFromPath(crPath, j)
-		if err != nil {
-			return nil, errors.Wrap(err, "error processObserve getSpecDataFromPath")
-		}
-		x1, err := ygot.ConstructIETFJSON(specGoStruct, &ygot.RFC7951JSONConfig{})
-		if err != nil {
-			return nil, errors.Wrap(err, "error ConstructIETFJSON x1")
-		}
-		/*
-			x1, err := ygot.EmitJSON(specGoStruct, &ygot.EmitJSONConfig{
-				Format: ygot.RFC7951,
-			})
-			if err != nil {
-				return nil, errors.Wrap(err, "error processObserve getSpecDataFromPath x1")
-			}
-		*/
-
-		// resp Data pre-processing
-		x2, err := DeepCopy(x)
-		if err != nil {
-			return nil, errors.Wrap(err, "error Deepcopy x")
-		}
-		// remove hierarchical paths from response for this particular path
-		switch x := x2.(type) {
-		case map[string]interface{}:
-			if hPaths, ok := crHierPaths[crRootPath]; ok {
-				// remove hierarchical paths
-				for _, hPath := range hPaths {
-					crhPath, err := yparser.ToGNMIPath(hPath)
-					if err != nil {
-						return &observe{hasData: false}, nil
-					}
-					x2 = removeHierarchicalResourceData(x, crhPath)
-				}
-			}
-		}
-
-		// remove non default data from the response since it is managed by a different resource
-		x2, err = e.removeNonDefaultDataFromPath(crPath, x2)
-		if err != nil {
-			return nil, errors.Wrap(err, "error removeNonDefaultDataFromPath")
-		}
-
-		respGoStruct, err := e.getGoStructFromPath(crPath, x2)
-		if err != nil {
-			return nil, errors.Wrap(err, "error getSpecDataFromPath")
-		}
-		x2, err = ygot.ConstructIETFJSON(respGoStruct, &ygot.RFC7951JSONConfig{})
-		if err != nil {
-			return nil, errors.Wrap(err, "error ConstructIETFJSON x2")
-		}
-		/*
-			x2, err = ygot.EmitJSON(respGoStruct, &ygot.EmitJSONConfig{
-				Format: ygot.RFC7951,
-			})
-			if err != nil {
-				return nil, errors.Wrap(err, "error ygot EmitJSON x2")
-			}
-		*/
-		fmt.Printf("processObserve path   : %s  \n", crRootPath)
-		fmt.Printf("processObserve x1 data: %s\n", x1)
-		fmt.Printf("processObserve x2 data: %v\n", x2)
-
-		n, err := ygot.Diff(respGoStruct, specGoStruct, &ygot.DiffPathOpt{MapToSinglePath: true})
-		if err != nil {
-			return nil, errors.Wrap(err, "error ygot diff")
-		}
-		if n != nil {
-			//fmt.Printf("processObserve len updates: %d\n", len(n.GetUpdate()))
-			//fmt.Printf("processObserve len deletes: %d\n", len(n.GetDelete()))
-			if len(n.GetUpdate()) != 0 || len(n.GetDelete()) != 0 {
-				upToDate = false
-			} else {
-				fmt.Printf("processObserve: up To date\n")
-			}
-			for _, u := range n.GetUpdate() {
-				fmt.Printf("processObserve: diff update old path: %s, value: %v\n", yparser.GnmiPath2XPath(u.GetPath(), true), u.GetVal())
-				// workaround since the diff can return double pathElem
-				update := validateUpdate(u)
-				fmt.Printf("processObserve: diff update new path: %s, value: %v\n", yparser.GnmiPath2XPath(update.GetPath(), true), update.GetVal())
-				updates = append(updates, update)
-			}
-			for _, path := range n.GetDelete() {
-				fmt.Printf("processObserve: diff delete path: %s\n", yparser.GnmiPath2XPath(path, true))
-				deletes = append(deletes, path)
-			}
-		}
+	specConfig, err := e.getGoStruct(specData)
+	if err != nil {
+		return &observe{hasData: false}, err
 	}
+
+	// skipping specValidation, this will probably result in missing leaf leafrefs
+	newConfigTmp, err := ygot.DeepCopy(actualConfig)
+	if err != nil {
+		return &observe{hasData: false}, nil
+	}
+	newConfig := newConfigTmp.(*ygotsrl.Device) // Typecast
+
+	// Merge spec into newconfig, which is right now jsut the actual config
+	err = ygot.MergeStructInto(newConfig, specConfig)
+	if err != nil {
+		return &observe{hasData: false}, nil
+	}
+
+	// validate the new config
+	//err = newConfig.Validate()
+	//if err != nil {
+	//	return &observe{hasData: false}, nil
+	//}
+
+	// create a diff of the actual compared to the to-become-new config
+	actualVsSpecDiff, err := ygot.Diff(actualConfig, newConfig, &ygot.DiffPathOpt{MapToSinglePath: true})
+	if err != nil {
+		return &observe{hasData: false}, nil
+	}
+
+	updates := validateNotification(actualVsSpecDiff)
 
 	return &observe{
 		hasData:  true,
-		upToDate: upToDate,
-		deletes:  deletes,
+		upToDate: len(actualVsSpecDiff.GetDelete()) == 0 && len(actualVsSpecDiff.GetUpdate()) == 0,
+		deletes:  actualVsSpecDiff.GetDelete(),
 		updates:  updates,
-	}, err
+	}, nil
+
+	/*
+		b, err := json.Marshal(x)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Printf("Process Observe: %s\n", string(b))
+
+		deletes := []*gnmi.Path{}
+		updates := []*gnmi.Update{}
+		upToDate := true
+		// for each path perform the diff between the spec and resp data
+		for _, crRootPath := range crRootPaths {
+			fmt.Printf("Process Observe: %s\n", crRootPath)
+			// deepcopy the spec data to avoid data manipulation of the spec
+			j, err := DeepCopy(specData)
+			if err != nil {
+				return nil, errors.Wrap(err, "error processObserve processSpecData")
+			}
+
+			// spec Data pre-processing
+			// remove all non relevant data from the spec based on the crPath
+			crPath, err := yparser.ToGNMIPath(crRootPath)
+			if err != nil {
+				return &observe{hasData: false}, nil
+			}
+
+			//	crPath, err := xpath.ToGNMIPath(crRootPath)
+			//	if err != nil {
+			//		return &observe{hasData: false}, nil
+			//	}
+			specGoStruct, err := e.getGoStructFromPath(crPath, j)
+			if err != nil {
+				return nil, errors.Wrap(err, "error processObserve getSpecDataFromPath")
+			}
+			x1, err := ygot.ConstructIETFJSON(specGoStruct, &ygot.RFC7951JSONConfig{})
+			if err != nil {
+				return nil, errors.Wrap(err, "error ConstructIETFJSON x1")
+			}
+
+			//	x1, err := ygot.EmitJSON(specGoStruct, &ygot.EmitJSONConfig{
+			//		Format: ygot.RFC7951,
+			//	})
+			//	if err != nil {
+			//		return nil, errors.Wrap(err, "error processObserve getSpecDataFromPath x1")
+			//	}
+
+
+			// resp Data pre-processing
+			x2, err := DeepCopy(x)
+			if err != nil {
+				return nil, errors.Wrap(err, "error Deepcopy x")
+			}
+			// remove hierarchical paths from response for this particular path
+			switch x := x2.(type) {
+			case map[string]interface{}:
+				if hPaths, ok := crHierPaths[crRootPath]; ok {
+					// remove hierarchical paths
+					for _, hPath := range hPaths {
+						crhPath, err := yparser.ToGNMIPath(hPath)
+						if err != nil {
+							return &observe{hasData: false}, nil
+						}
+						x2 = removeHierarchicalResourceData(x, crhPath)
+					}
+				}
+			}
+
+			// remove non default data from the response since it is managed by a different resource
+			x2, err = e.removeNonDefaultDataFromPath(crPath, x2)
+			if err != nil {
+				return nil, errors.Wrap(err, "error removeNonDefaultDataFromPath")
+			}
+
+			respGoStruct, err := e.getGoStructFromPath(crPath, x2)
+			if err != nil {
+				return nil, errors.Wrap(err, "error getSpecDataFromPath")
+			}
+			x2, err = ygot.ConstructIETFJSON(respGoStruct, &ygot.RFC7951JSONConfig{})
+			if err != nil {
+				return nil, errors.Wrap(err, "error ConstructIETFJSON x2")
+			}
+
+			//	x2, err = ygot.EmitJSON(respGoStruct, &ygot.EmitJSONConfig{
+			//		Format: ygot.RFC7951,
+			//	})
+			//	if err != nil {
+			//		return nil, errors.Wrap(err, "error ygot EmitJSON x2")
+			//	}
+
+			fmt.Printf("processObserve path   : %s  \n", crRootPath)
+			fmt.Printf("processObserve x1 data: %s\n", x1)
+			fmt.Printf("processObserve x2 data: %v\n", x2)
+
+			n, err := ygot.Diff(respGoStruct, specGoStruct, &ygot.DiffPathOpt{MapToSinglePath: true})
+			if err != nil {
+				return nil, errors.Wrap(err, "error ygot diff")
+			}
+			if n != nil {
+				//fmt.Printf("processObserve len updates: %d\n", len(n.GetUpdate()))
+				//fmt.Printf("processObserve len deletes: %d\n", len(n.GetDelete()))
+				if len(n.GetUpdate()) != 0 || len(n.GetDelete()) != 0 {
+					upToDate = false
+				} else {
+					fmt.Printf("processObserve: up To date\n")
+				}
+				for _, u := range n.GetUpdate() {
+					fmt.Printf("processObserve: diff update old path: %s, value: %v\n", yparser.GnmiPath2XPath(u.GetPath(), true), u.GetVal())
+					// workaround since the diff can return double pathElem
+					update := validateUpdate(u)
+					fmt.Printf("processObserve: diff update new path: %s, value: %v\n", yparser.GnmiPath2XPath(update.GetPath(), true), update.GetVal())
+					updates = append(updates, update)
+				}
+				for _, path := range n.GetDelete() {
+					fmt.Printf("processObserve: diff delete path: %s\n", yparser.GnmiPath2XPath(path, true))
+					deletes = append(deletes, path)
+				}
+			}
+		}
+	*/
+
+	/*
+		return &observe{
+			hasData:  true,
+			upToDate: upToDate,
+			deletes:  deletes,
+			updates:  updates,
+		}, err
+	*/
+}
+
+func validateNotification(n *gnmi.Notification) []*gnmi.Update {
+	updates := make([]*gnmi.Update, 0)
+	for _, u := range n.GetUpdate() {
+		fmt.Printf("processObserve: diff update old path: %s, value: %v\n", yparser.GnmiPath2XPath(u.GetPath(), true), u.GetVal())
+		// workaround since the diff can return double pathElem
+		update := validateUpdate(u)
+		fmt.Printf("processObserve: diff update new path: %s, value: %v\n", yparser.GnmiPath2XPath(update.GetPath(), true), update.GetVal())
+		updates = append(updates, update)
+	}
+	return updates
 }
 
 // workaround for the dif handling

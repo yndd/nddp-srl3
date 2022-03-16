@@ -1,4 +1,4 @@
-package srl3
+package v1alpha1
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/openconfig/ygot/ygot"
 	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
 	"github.com/yndd/ndd-runtime/pkg/meta"
+	"github.com/yndd/nddo-intent-runtime/pkg/intent"
 	"github.com/yndd/nddo-runtime/pkg/odns"
 	"github.com/yndd/nddo-runtime/pkg/resource"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
@@ -18,35 +19,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	errDeleteDevice = "cannot delete device"
-	errGetDevice    = "cannot get device"
-)
-
-type Device interface {
-	// methods data
-	Get() *ygotsrl.Device
-	Print() error
-	// methods schema
-	Deploy(ctx context.Context, mg resource.Managed, deviceName string, labels map[string]string) error
-	Destroy(ctx context.Context, mg resource.Managed, deviceName string, labels map[string]string) error
-	List(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) error
-	Validate(ctx context.Context, mg resource.Managed, deviceName string, resources map[string]map[string]struct{}) error
-	Delete(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) error
-	//ListResourcesByTransaction(ctx context.Context, cr srlv1alpha1.IFSrlTransaction, resources map[string]map[string]map[string]interface{}) error
-}
-
-func NewDevice(c resource.ClientApplicator, p Schema, name string) Device {
+func InitSrl(c resource.ClientApplicator, p intent.Intent, name string) intent.Instance {
 	newDeviceList := func() srlv1alpha1.IFSrl3DeviceList { return &srlv1alpha1.Srl3DeviceList{} }
 	return &device{
-		// k8s client
-		client: c,
-		// key
-		name: name,
-		// parent
-		parent: p,
-		// data
-		device:        &ygotsrl.Device{},
+		client:        c,
+		name:          name,
+		parent:        p,
 		newDeviceList: newDeviceList,
 	}
 }
@@ -57,14 +35,14 @@ type device struct {
 	// key
 	name string
 	// parent
-	parent Schema
+	parent intent.Intent
 	// children
 	// Data
 	device        *ygotsrl.Device
 	newDeviceList func() srlv1alpha1.IFSrl3DeviceList
 }
 
-func (x *device) Get() *ygotsrl.Device {
+func (x *device) Get() interface{} {
 	return x.device
 }
 
@@ -81,30 +59,30 @@ func (x *device) Print() error {
 	return nil
 }
 
-func (x *device) Deploy(ctx context.Context, mg resource.Managed, deviceName string, labels map[string]string) error {
-	cr, err := x.buildCR(mg, deviceName, labels)
+func (x *device) Deploy(ctx context.Context, mg resource.Managed, labels map[string]string) error {
+	cr, err := x.buildCR(mg, x.name, labels)
 	if err != nil {
 		return err
 	}
 	return x.client.Apply(ctx, cr)
 }
 
-func (x *device) Destroy(ctx context.Context, mg resource.Managed, deviceName string, labels map[string]string) error {
-	cr, err := x.buildCR(mg, deviceName, labels)
+func (x *device) Destroy(ctx context.Context, mg resource.Managed, labels map[string]string) error {
+	cr, err := x.buildCR(mg, x.name, labels)
 	if err != nil {
 		return err
 	}
 	return x.client.Delete(ctx, cr)
 }
 
-func (x *device) List(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) error {
+func (x *device) List(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
 	// local CR list
 	opts := []client.ListOption{
 		client.MatchingLabels{srlv1alpha1.LabelNddaOwner: odns.GetOdnsResourceKindName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind))},
 	}
 	list := x.newDeviceList()
 	if err := x.client.List(ctx, list, opts...); err != nil {
-		return err
+		return nil, err
 	}
 
 	var Empty struct{}
@@ -115,20 +93,20 @@ func (x *device) List(ctx context.Context, mg resource.Managed, resources map[st
 		resources[i.GetObjectKind().GroupVersionKind().Kind][i.GetName()] = Empty
 	}
 
-	return nil
+	return resources, nil
 }
 
-func (x *device) Validate(ctx context.Context, mg resource.Managed, deviceName string, resources map[string]map[string]struct{}) error {
+func (x *device) Validate(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
 	// local CR validation
 	resourceName := odns.GetOdnsResourceName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind),
 		[]string{
-			strings.ToLower(deviceName)})
+			strings.ToLower(x.name)})
 
 	if r, ok := resources[srlv1alpha1.DeviceKindKind]; ok {
 		delete(r, resourceName)
 	}
 
-	return nil
+	return resources, nil
 }
 
 func (x *device) Delete(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) error {

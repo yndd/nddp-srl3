@@ -6,7 +6,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/openconfig/gnmi v0.0.0-20210914185457-51254b657b7d
 	github.com/openconfig/goyang v1.0.0
-	github.com/openconfig/ygot v0.15.1
+	github.com/openconfig/ygot v0.16.0
 	github.com/yndd/ndd-runtime v0.3.1
 	google.golang.org/grpc v1.43.0
 	google.golang.org/protobuf v1.27.1
@@ -25,8 +25,8 @@ require (
 	github.com/yndd/ndd-core v0.1.7
 	github.com/yndd/ndd-yang v0.2.7
 	github.com/yndd/ndda-network v0.1.35
+	github.com/yndd/nddo-intent-runtime v0.0.1
 	github.com/yndd/nddo-runtime v0.0.72
-	github.com/yndd/nddp-srl v0.0.30
 	github.com/yndd/nddp-system v0.2.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.22.2

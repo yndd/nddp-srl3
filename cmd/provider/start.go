@@ -38,14 +38,13 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/ratelimiter"
 	"github.com/yndd/ndd-runtime/pkg/resource"
-	"github.com/yndd/ndd-yang/pkg/yentry"
 
-	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
+	//nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
 
 	"github.com/yndd/nddp-srl3/internal/controllers"
 	"github.com/yndd/nddp-srl3/internal/devicedriver"
 	"github.com/yndd/nddp-srl3/internal/shared"
-	"github.com/yndd/nddp-srl3/pkg/yangschema"
+	//"github.com/yndd/nddp-srl3/pkg/yangschema"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -108,18 +107,18 @@ var startCmd = &cobra.Command{
 		zlog.Info("gnmi address", "address", gnmiAddress)
 
 		// initialize the root schema
-		deviceSchema := yangschema.InitRoot(nil,
-			yentry.WithLogging(logging.NewLogrLogger(zlog.WithName("srl3yangschema"))))
+		//deviceSchema := yangschema.InitRoot(nil,
+		//	yentry.WithLogging(logging.NewLogrLogger(zlog.WithName("srl3yangschema"))))
 
-		nddpSchema := nddpschema.InitRoot(nil,
-			yentry.WithLogging(logging.NewLogrLogger(zlog.WithName("nddpyangschema"))))
+		//nddpSchema := nddpschema.InitRoot(nil,
+		//	yentry.WithLogging(logging.NewLogrLogger(zlog.WithName("nddpyangschema"))))
 
 		nddcopts := &shared.NddControllerOptions{
-			Logger:                 logging.NewLogrLogger(zlog.WithName("srl")),
-			Poll:                   pollInterval,
-			Namespace:              namespace,
-			DeviceSchema:           deviceSchema,
-			NddpSchema:             nddpSchema,
+			Logger:    logging.NewLogrLogger(zlog.WithName("srl")),
+			Poll:      pollInterval,
+			Namespace: namespace,
+			//DeviceSchema:           deviceSchema,
+			//NddpSchema:             nddpSchema,
 			GnmiAddress:            gnmiAddress,
 			DeviceDriverRequestCh:  make(chan shared.DeviceUpdate),
 			DeviceDriverResponseCh: make(chan shared.DeviceResponse),
@@ -139,7 +138,7 @@ var startCmd = &cobra.Command{
 				Applicator: resource.NewAPIPatchingApplicator(mgr.GetClient()),
 			}),
 			devicedriver.WithLogger(logging.NewLogrLogger(zlog.WithName("device driver"))),
-			devicedriver.WithDeviceSchema(deviceSchema),
+			//devicedriver.WithDeviceSchema(deviceSchema),
 			devicedriver.WithEventCh(eventChs),
 		)
 		if err := d.Start(); err != nil {

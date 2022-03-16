@@ -19,6 +19,7 @@ package srl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -36,9 +37,8 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/reconciler/managed"
 	"github.com/yndd/ndd-runtime/pkg/resource"
 	"github.com/yndd/ndd-runtime/pkg/utils"
-	"github.com/yndd/ndd-yang/pkg/yentry"
+	//"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/ndd-yang/pkg/yparser"
-	"github.com/yndd/ndd-yang/pkg/yresource"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -95,21 +95,21 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 		resource.ManagedKind(srlv1alpha1.DeviceGroupVersionKind),
 		managed.WithPollInterval(nddcopts.Poll),
 		managed.WithExternalConnecter(&connectorDevice{
-			log:          nddcopts.Logger,
-			kube:         mgr.GetClient(),
-			usage:        resource.NewNetworkNodeUsageTracker(mgr.GetClient(), &ndrv1.NetworkNodeUsage{}),
-			deviceSchema: nddcopts.DeviceSchema,
-			nddpSchema:   nddcopts.NddpSchema,
-			deviceModel:  dm,
-			systemModel:  sm,
-			newClientFn:  target.NewTarget,
-			gnmiAddress:  nddcopts.GnmiAddress},
+			log:   nddcopts.Logger,
+			kube:  mgr.GetClient(),
+			usage: resource.NewNetworkNodeUsageTracker(mgr.GetClient(), &ndrv1.NetworkNodeUsage{}),
+			//deviceSchema: nddcopts.DeviceSchema,
+			//nddpSchema:   nddcopts.NddpSchema,
+			deviceModel: dm,
+			systemModel: sm,
+			newClientFn: target.NewTarget,
+			gnmiAddress: nddcopts.GnmiAddress},
 		),
 		managed.WithValidator(&validatorDevice{
-			log:          nddcopts.Logger,
-			deviceSchema: nddcopts.DeviceSchema,
-			deviceModel:  dm,
-			systemModel:  sm,
+			log: nddcopts.Logger,
+			//deviceSchema: nddcopts.DeviceSchema,
+			deviceModel: dm,
+			systemModel: sm,
 		},
 		),
 		managed.WithLogger(nddcopts.Logger.WithValues("Srl3Device", name)),
@@ -140,10 +140,31 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 }
 
 type validatorDevice struct {
-	log          logging.Logger
-	deviceSchema *yentry.Entry
-	deviceModel  *model.Model
-	systemModel  *model.Model
+	log logging.Logger
+	//deviceSchema *yentry.Entry
+	deviceModel *model.Model
+	systemModel *model.Model
+}
+
+func printRootPaths(crName string, crRootPaths []string) {
+	fmt.Println("++++++++++++++++++++++++++++++++++++++")
+	fmt.Printf("rootPaths for cr: %s\n", crName)
+	for _, p := range crRootPaths {
+		fmt.Printf("  rootPath: %s\n", p)
+	}
+	fmt.Println("++++++++++++++++++++++++++++++++++++++")
+}
+
+func printHierPaths(crName string, crHierPaths map[string][]string) {
+	fmt.Println("++++++++++++++++++++++++++++++++++++++")
+	fmt.Printf("hierPaths for cr: %s\n", crName)
+	for p, hierPaths := range crHierPaths {
+		for _, hierPath := range hierPaths {
+			fmt.Printf("  rootPath: %s hierPath: %s\n", p, hierPath)
+		}
+	}
+	fmt.Println("++++++++++++++++++++++++++++++++++++++")
+
 }
 
 // ValidateResourceIndexes validates if the indexes of a resource got changed
@@ -168,7 +189,7 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 
 	rootPaths := []string{}
 	for _, crRootPath := range crRootPaths {
-		log.Debug("ValidateRootPaths rootPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
+		//log.Debug("ValidateRootPaths rootPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
 		rootPaths = append(rootPaths, yparser.GnmiPath2XPath(crRootPath, true))
 	}
 
@@ -176,15 +197,21 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 	if err != nil {
 		return managed.ValidateRootPathsObservation{}, err
 	}
-	log.Debug("ValidateRootPaths", "hierPaths", hierPaths)
+	//log.Debug("ValidateRootPaths", "hierPaths", hierPaths)
 
 	hierRootPaths := map[string][]string{}
 	for rootPath, crRootPaths := range hierPaths {
 		for _, crRootPath := range crRootPaths {
-			log.Debug("findPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
+			//log.Debug("findPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
+			if strings.HasPrefix(yparser.GnmiPath2XPath(crRootPath, true), "/routing-policy") {
+				break
+			}
 			hierRootPaths[rootPath] = append(hierRootPaths[rootPath], yparser.GnmiPath2XPath(crRootPath, true))
 		}
 	}
+
+	printRootPaths(mg.GetName(), rootPaths)
+	printHierPaths(mg.GetName(), hierRootPaths)
 
 	return managed.ValidateRootPathsObservation{
 		Changed:     false,
@@ -197,16 +224,16 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 // A connector is expected to produce an ExternalClient when its Connect method
 // is called.
 type connectorDevice struct {
-	log          logging.Logger
-	kube         client.Client
-	usage        resource.Tracker
-	deviceSchema *yentry.Entry
-	nddpSchema   *yentry.Entry
-	deviceModel  *model.Model
-	systemModel  *model.Model
-	y            yresource.Handler
-	newClientFn  func(c *gnmitypes.TargetConfig) *target.Target
-	gnmiAddress  string
+	log   logging.Logger
+	kube  client.Client
+	usage resource.Tracker
+	//deviceSchema *yentry.Entry
+	//nddpSchema   *yentry.Entry
+	deviceModel *model.Model
+	systemModel *model.Model
+	//y            yresource.Handler
+	newClientFn func(c *gnmitypes.TargetConfig) *target.Target
+	gnmiAddress string
 }
 
 // Connect produces an ExternalClient by:
@@ -256,19 +283,20 @@ func (c *connectorDevice) Connect(ctx context.Context, mg resource.Managed) (man
 
 	tns := []string{nn.GetName()}
 
-	return &externalDevice{client: cl, targets: tns, log: log, deviceSchema: c.deviceSchema, nddpSchema: c.nddpSchema, deviceModel: c.deviceModel, systemModel: c.systemModel}, nil
+	//return &externalDevice{client: cl, targets: tns, log: log, deviceSchema: c.deviceSchema, nddpSchema: c.nddpSchema, deviceModel: c.deviceModel, systemModel: c.systemModel}, nil
+	return &externalDevice{client: cl, targets: tns, log: log, deviceModel: c.deviceModel, systemModel: c.systemModel}, nil
 }
 
 // An ExternalClient observes, then either creates, updates, or deletes an
 // external resource to ensure it reflects the managed resource's desired state.
 type externalDevice struct {
-	client       *target.Target
-	targets      []string
-	log          logging.Logger
-	deviceSchema *yentry.Entry
-	nddpSchema   *yentry.Entry
-	deviceModel  *model.Model
-	systemModel  *model.Model
+	client  *target.Target
+	targets []string
+	log     logging.Logger
+	//deviceSchema *yentry.Entry
+	//nddpSchema   *yentry.Entry
+	deviceModel *model.Model
+	systemModel *model.Model
 }
 
 func (e *externalDevice) Close() {

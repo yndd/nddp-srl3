@@ -1,17 +1,6 @@
 package srl
 
-import (
-	"encoding/json"
-	"fmt"
-	"reflect"
-	"strconv"
-
-	"github.com/openconfig/gnmi/proto/gnmi"
-	"github.com/openconfig/goyang/pkg/yang"
-	"github.com/openconfig/ygot/ygot"
-	"github.com/pkg/errors"
-)
-
+/*
 //process Spec data marshals the data and remove the prent hierarchical keys
 func (e *externalDevice) processData(x interface{}) (map[string]interface{}, error) {
 	config, err := json.Marshal(x)
@@ -29,7 +18,9 @@ func (e *externalDevice) processData(x interface{}) (map[string]interface{}, err
 
 	return ygot.ConstructIETFJSON(rootSpecStruct, &ygot.RFC7951JSONConfig{})
 }
+*/
 
+/*
 func (e *externalDevice) removeNonDefaultDataFromPath(rootPath *gnmi.Path, x interface{}) (interface{}, error) {
 	jsonIETFTree, err := e.processData(x)
 	if err != nil {
@@ -46,7 +37,9 @@ func (e *externalDevice) removeNonDefaultDataFromPath(rootPath *gnmi.Path, x int
 	}
 	return jsonIETFTree, nil
 }
+*/
 
+/*
 func removeNonDefaultData(rootPath *gnmi.Path, curNode map[string]interface{}, schema *yang.Entry) error {
 	if len(rootPath.GetElem()) >= 1 {
 		// delete the data that is not relevant for this spec
@@ -99,7 +92,9 @@ func removeNonDefaultData(rootPath *gnmi.Path, curNode map[string]interface{}, s
 	}
 	return nil
 }
+*/
 
+/*
 func findNextKeyedListEntry(rootPath *gnmi.Path, curNode interface{}, schema *yang.Entry) error {
 	//fmt.Printf("getSpecNextKeyedListEntry: curNode %v\n", curNode)
 
@@ -181,7 +176,9 @@ func findNextKeyedListEntry(rootPath *gnmi.Path, curNode interface{}, schema *ya
 	}
 
 }
+*/
 
+/*
 func (e *externalDevice) getGoStructFromPath(rootPath *gnmi.Path, x interface{}) (ygot.ValidatedGoStruct, error) {
 	jsonIETFTree, err := e.processData(x)
 	if err != nil {
@@ -211,17 +208,23 @@ func (e *externalDevice) getGoStructFromPath(rootPath *gnmi.Path, x interface{})
 	return goStruct, nil
 
 }
+*/
 
+/*
 func getData(rootPath *gnmi.Path, curNode map[string]interface{}, schema *yang.Entry) error {
 	if len(rootPath.GetElem()) != 0 {
 		// delete the data that is not relevant for this spec
 		for pathElemName := range curNode {
 			// avoid cutting the keys from the json/node struct
-			if schema.Key == "" {
-				if pathElemName != rootPath.GetElem()[0].GetName() {
-					delete(curNode, pathElemName)
-				}
+			if pathElemName == schema.Key {
+				break
 			}
+			// cut all the
+			if pathElemName != rootPath.GetElem()[0].GetName() {
+				fmt.Printf("getSpecData delete: pathElemName: %s, node: %v\n", pathElemName, curNode)
+				delete(curNode, pathElemName)
+			}
+
 		}
 		node, ok := curNode[rootPath.GetElem()[0].GetName()]
 		if !ok {
@@ -252,7 +255,9 @@ func getData(rootPath *gnmi.Path, curNode map[string]interface{}, schema *yang.E
 	}
 	return nil
 }
+*/
 
+/*
 func getNextKeyedListEntry(rootPath *gnmi.Path, curNode interface{}, schema *yang.Entry) (interface{}, error) {
 	//fmt.Printf("getSpecNextKeyedListEntry: curNode %v\n", curNode)
 
@@ -336,3 +341,4 @@ func getNextKeyedListEntry(rootPath *gnmi.Path, curNode interface{}, schema *yan
 	}
 
 }
+*/

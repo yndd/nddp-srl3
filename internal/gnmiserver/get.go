@@ -217,69 +217,70 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 			}
 			node := nodes[0].Data
 
-			for _, node := range nodes {
-				nodeStruct, ok := node.Data.(ygot.GoStruct)
-				// return a leaf node
-				if !ok {
-					var val *gnmi.TypedValue
-					switch kind := reflect.ValueOf(node).Kind(); kind {
-					case reflect.Ptr, reflect.Interface:
-						var err error
-						val, err = value.FromScalar(reflect.ValueOf(node).Elem().Interface())
-						if err != nil {
-							msg := fmt.Sprintf("leaf node %v does not contain a scalar type value: %v", path, err)
-							s.log.Debug("Error", "msg", msg)
-							return nil, status.Error(codes.Internal, msg)
+			/*
+				for _, node := range nodes {
+					nodeStruct, ok := node.Data.(ygot.GoStruct)
+					// return a leaf node
+					if !ok {
+						var val *gnmi.TypedValue
+						switch kind := reflect.ValueOf(node).Kind(); kind {
+						case reflect.Ptr, reflect.Interface:
+							var err error
+							val, err = value.FromScalar(reflect.ValueOf(node).Elem().Interface())
+							if err != nil {
+								msg := fmt.Sprintf("leaf node %v does not contain a scalar type value: %v", path, err)
+								s.log.Debug("Error", "msg", msg)
+								return nil, status.Error(codes.Internal, msg)
+							}
+						case reflect.Int64:
+							enumMap, ok := m.EnumData[reflect.TypeOf(node).Name()]
+							if !ok {
+								return nil, status.Error(codes.Internal, "not a GoStruct enumeration type")
+							}
+							val = &gnmi.TypedValue{
+								Value: &gnmi.TypedValue_StringVal{
+									StringVal: enumMap[reflect.ValueOf(node).Int()].Name,
+								},
+							}
+						default:
+							return nil, status.Errorf(codes.Internal, "unexpected kind of leaf node type: %v %v", node, kind)
 						}
-					case reflect.Int64:
-						enumMap, ok := m.EnumData[reflect.TypeOf(node).Name()]
-						if !ok {
-							return nil, status.Error(codes.Internal, "not a GoStruct enumeration type")
-						}
-						val = &gnmi.TypedValue{
-							Value: &gnmi.TypedValue_StringVal{
-								StringVal: enumMap[reflect.ValueOf(node).Int()].Name,
-							},
-						}
-					default:
-						return nil, status.Errorf(codes.Internal, "unexpected kind of leaf node type: %v %v", node, kind)
+						fmt.Println(val)
 					}
-					fmt.Println(val)
-				}
-				// Return IETF JSON by default.
-				jsonEncoder := func() (map[string]interface{}, error) {
-					return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{AppendModuleName: true})
-				}
-				jsonType := "IETF with moduleName"
-				//buildUpdate := func(b []byte) *gnmi.Update {
-				//	return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonIetfVal{JsonIetfVal: b}}}
-				//}
-
-				if req.GetEncoding() == gnmi.Encoding_JSON {
-					jsonEncoder = func() (map[string]interface{}, error) {
-						return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{})
+					// Return IETF JSON by default.
+					jsonEncoder := func() (map[string]interface{}, error) {
+						return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{AppendModuleName: true})
 					}
-					jsonType = "IETF without moduleName"
-					//buildUpdate = func(b []byte) *gnmi.Update {
-					//	return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: b}}}
+					jsonType := "IETF with moduleName"
+					//buildUpdate := func(b []byte) *gnmi.Update {
+					//	return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonIetfVal{JsonIetfVal: b}}}
 					//}
-				}
 
-				jsonTree, err := jsonEncoder()
-				if err != nil {
-					msg := fmt.Sprintf("error in constructing %s JSON tree from requested node: %v", jsonType, err)
-					s.log.Debug("Error", "msg", msg)
-					return nil, status.Error(codes.Internal, msg)
-				}
+					if req.GetEncoding() == gnmi.Encoding_JSON {
+						jsonEncoder = func() (map[string]interface{}, error) {
+							return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{})
+						}
+						jsonType = "IETF without moduleName"
+						//buildUpdate = func(b []byte) *gnmi.Update {
+						//	return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: b}}}
+						//}
+					}
 
-				jsonDump, err := json.Marshal(jsonTree)
-				if err != nil {
-					msg := fmt.Sprintf("error in marshaling %s JSON tree to bytes: %v", jsonType, err)
-					s.log.Debug("Error", "msg", msg)
-					return nil, status.Error(codes.Internal, msg)
+					jsonTree, err := jsonEncoder()
+					if err != nil {
+						msg := fmt.Sprintf("error in constructing %s JSON tree from requested node: %v", jsonType, err)
+						s.log.Debug("Error", "msg", msg)
+						return nil, status.Error(codes.Internal, msg)
+					}
+					jsonDump, err := json.Marshal(jsonTree)
+					if err != nil {
+						msg := fmt.Sprintf("error in marshaling %s JSON tree to bytes: %v", jsonType, err)
+						s.log.Debug("Error", "msg", msg)
+						return nil, status.Error(codes.Internal, msg)
+					}
+					fmt.Println(string(jsonDump))
 				}
-				fmt.Println(string(jsonDump))
-			}
+			*/
 
 			nodeStruct, ok := node.(ygot.GoStruct)
 			// Return leaf node.

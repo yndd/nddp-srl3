@@ -1225,8 +1225,9 @@ github.com/openconfig/grpctunnel v0.0.0-20210610163803-fde4a9dc048d h1:zrs4U92QE
 github.com/openconfig/grpctunnel v0.0.0-20210610163803-fde4a9dc048d/go.mod h1:x9tAZ4EwqCQ0jI8D6S8Yhw9Z0ee7/BxWQX0k0Uib5Q8=
 github.com/openconfig/ygot v0.6.0/go.mod h1:o30svNf7O0xK+R35tlx95odkDmZWS9JyWWQSmIhqwAs=
 github.com/openconfig/ygot v0.10.4/go.mod h1:oCQNdXnv7dWc8scTDgoFkauv1wwplJn5HspHcjlxSAQ=
-github.com/openconfig/ygot v0.15.1 h1:mkouquSR1HGdSjW4WW6rB6KuApDaRr7a/ZQfFwe2REU=
 github.com/openconfig/ygot v0.15.1/go.mod h1:7ZiBFNc4n/1Hkv2v2dAEpxisqDznp0JVpLR13Toe4AY=
+github.com/openconfig/ygot v0.16.0 h1:GCjINO7oUd6nLJJYykVM4vTAib3HbwyFNSsY3ppeLSA=
+github.com/openconfig/ygot v0.16.0/go.mod h1:7ZiBFNc4n/1Hkv2v2dAEpxisqDznp0JVpLR13Toe4AY=
 github.com/opencontainers/go-digest v0.0.0-20170106003457-a6d0ee40d420/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=
 github.com/opencontainers/go-digest v0.0.0-20180430190053-c9281466c8b2/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=
 github.com/opencontainers/go-digest v1.0.0-rc1/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=
@@ -1539,6 +1540,8 @@ github.com/yndd/ndda-network v0.1.35/go.mod h1:kTxC7g33D2ULQE7ckxu2erlr6eQQwC+8W
 github.com/yndd/nddo-grpc v0.0.11/go.mod h1:EtOPd2XxbxDMLMNheomiDZBQCCtY0DRdOer3MOEsgH0=
 github.com/yndd/nddo-grpc v0.0.16/go.mod h1:EtOPd2XxbxDMLMNheomiDZBQCCtY0DRdOer3MOEsgH0=
 github.com/yndd/nddo-grpc v0.0.17/go.mod h1:EtOPd2XxbxDMLMNheomiDZBQCCtY0DRdOer3MOEsgH0=
+github.com/yndd/nddo-intent-runtime v0.0.1 h1:J94t64RHT+ku3CcD/8mGUrePGcmNFPDqZzYoI0kQ1JE=
+github.com/yndd/nddo-intent-runtime v0.0.1/go.mod h1:btw+NbkjggmZZnTOwiSTf6FqemLEACFq1ATx1fX15wg=
 github.com/yndd/nddo-runtime v0.0.49/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC9bQQ2cOm0o=
 github.com/yndd/nddo-runtime v0.0.53/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC9bQQ2cOm0o=
 github.com/yndd/nddo-runtime v0.0.54/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC9bQQ2cOm0o=
@@ -1549,9 +1552,9 @@ github.com/yndd/nddo-runtime v0.0.72 h1:06fLi8puy5AKMYroWklI4Dbis4ltKkNW2SxHl6vx
 github.com/yndd/nddo-runtime v0.0.72/go.mod h1:eSZogwj8QTfxO6134fdd93h1KfezKDJr4BP8Ew4fkCA=
 github.com/yndd/nddo-vpc v0.0.4/go.mod h1:muTApxdcuYwWrjM/Zrsq4pXWetshIaiXikoa8+Tv+AA=
 github.com/yndd/nddo-vpc v0.0.5/go.mod h1:l98TClQHm2TtC2dSL1REEvBXiX+Vj/MigwnWpY/ZuvQ=
-github.com/yndd/nddp-srl v0.0.30 h1:0E0GNT++p7zSWKNUL3IKFrTssf1POLojJATLaq9ynHk=
 github.com/yndd/nddp-srl v0.0.30/go.mod h1:KDOkp5Ujr+UNr6qUl+XSGoVHv2IRh9bZo+RdhnkKntk=
 github.com/yndd/nddp-srl3 v0.0.1/go.mod h1:lPjUIiSfdBiOjyWsdHbPu9gaLO7D2Q5ROjmw13MxmU4=
+github.com/yndd/nddp-srl3 v0.0.16/go.mod h1:QueBYCLJhcII0qCK5NbtDcxCvRYwPHSSzac/oWtZgko=
 github.com/yndd/nddp-system v0.0.25/go.mod h1:430zJYP2NTxa+wOOC1ANuTMdW6WqRwsgz6n4wqGz5JA=
 github.com/yndd/nddp-system v0.0.30/go.mod h1:5yZZvSmaCcSxag0kK9r1j1Sf7Kh/JS5bq3oeGYaGdbQ=
 github.com/yndd/nddp-system v0.1.6/go.mod h1:de07SAGt/KWH6n3pSRCNt9Ylty1jhSqCmbFtglvvXaI=
