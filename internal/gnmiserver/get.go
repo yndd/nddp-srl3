@@ -160,7 +160,7 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 						Update: []*gnmi.Update{
 							{
 								Path: &gnmi.Path{},
-								Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: []byte(*resource.Spec)}},
+								Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_StringVal{StringVal: *resource.Spec}},
 							},
 						},
 					}

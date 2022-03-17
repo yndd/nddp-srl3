@@ -9,7 +9,7 @@ import (
 	"github.com/openconfig/ygot/ygot"
 	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
 	"github.com/yndd/ndd-runtime/pkg/meta"
-	"github.com/yndd/nddo-intent-runtime/pkg/intent"
+	"github.com/yndd/nddo-runtime/pkg/intent"
 	"github.com/yndd/nddo-runtime/pkg/odns"
 	"github.com/yndd/nddo-runtime/pkg/resource"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"

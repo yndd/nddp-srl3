@@ -37,6 +37,7 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/reconciler/managed"
 	"github.com/yndd/ndd-runtime/pkg/resource"
 	"github.com/yndd/ndd-runtime/pkg/utils"
+
 	//"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
@@ -377,48 +378,38 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 				// if the specs are equal return observation.ResponseSuccess -> False
 				// if the specs are not equal follow the regular procedure
 				//log.Debug("observing when using gnmic: resource failed")
-				// TODO
-				return managed.ExternalObservation{
-					Ready:      true,
-					Exists:     true,
-					Pending:    false,
-					Failed:     true,
-					HasData:    false,
-					IsUpToDate: false,
-				}, nil
-				/*
-					failedObserve, err := processObserve(rootPath[0], hierElements, &cr.Spec, resp, e.deviceSchema)
-					if err != nil {
-						return managed.ExternalObservation{}, err
-					}
-					if failedObserve.upToDate {
-						// there is no difference between the previous spec and the current spec, so we dont retry
-						// given the previous attempt failed
-						return managed.ExternalObservation{
-							Ready:      true,
-							Exists:     true,
-							Pending:    false,
-							Failed:     true,
-							HasData:    false,
-							IsUpToDate: false,
-						}, nil
-					} else {
-						// this should trigger an update
-						return managed.ExternalObservation{
-							Ready:      true,
-							Exists:     true,
-							Pending:    false,
-							Failed:     false,
-							HasData:    true,
-							IsUpToDate: false,
-						}, nil
-					}
-				*/
+				failedObserve, err := e.processObserve(*cr.Spec.Device, resp)
+				if err != nil {
+					return managed.ExternalObservation{}, err
+				}
+				if failedObserve.upToDate {
+					// there is no difference between the previous spec and the current spec, so we dont retry
+					// given the previous attempt failed
+					return managed.ExternalObservation{
+						Ready:      true,
+						Exists:     true,
+						Pending:    false,
+						Failed:     true,
+						Message:    er.Message(),
+						HasData:    false,
+						IsUpToDate: false,
+					}, nil
+				} else {
+					// this should trigger an update
+					return managed.ExternalObservation{
+						Ready:      true,
+						Exists:     true,
+						Pending:    false,
+						Failed:     false,
+						HasData:    true,
+						IsUpToDate: false,
+					}, nil
+				}
 			}
 		}
 	}
 
-	observe, err := e.processObserve(mg.GetRootPaths(), mg.GetHierPaths(), *cr.Spec.Device, resp)
+	observe, err := e.processObserve(*cr.Spec.Device, resp)
 	if err != nil {
 		log.Debug("Observe Response", "error", err)
 		if strings.Contains(err.Error(), "not found") {
