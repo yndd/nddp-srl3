@@ -24,6 +24,7 @@ func InitSrl(c resource.ClientApplicator, p intent.Intent, name string) intent.I
 		client:        c,
 		name:          name,
 		parent:        p,
+		device:        &ygotsrl.Device{},
 		newDeviceList: newDeviceList,
 	}
 }
