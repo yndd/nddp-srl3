@@ -313,8 +313,6 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 		return managed.ExternalObservation{}, errors.New(errUnexpectedDevice)
 	}
 
-	// TODO get paths dynamically
-
 	gvkName := gvkresource.GetGvkName(mg)
 
 	crDeviceName := "ygot." + shared.GetCrDeviceName(mg.GetNamespace(), cr.GetNetworkNodeReference().Name)
@@ -375,8 +373,8 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 				}, nil
 			case codes.FailedPrecondition:
 				// the k8s resource exists but is in failed status, compare the response spec with current spec
-				// if the specs are equal return observation.ResponseSuccess -> False
-				// if the specs are not equal follow the regular procedure
+				// if the specs are equal return failed status and the reconcile loop will stop
+				// if the specs are not equal
 				//log.Debug("observing when using gnmic: resource failed")
 				failedObserve, err := e.processObserve(*cr.Spec.Device, resp)
 				if err != nil {
@@ -398,11 +396,13 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 					// this should trigger an update
 					return managed.ExternalObservation{
 						Ready:      true,
-						Exists:     true,
+						Exists:     false, // we set exists to false to ensure the resource is recreated
 						Pending:    false,
 						Failed:     false,
-						HasData:    true,
+						HasData:    false,
 						IsUpToDate: false,
+						Deletes:    []*gnmi.Path{},
+						Updates:    []*gnmi.Update{},
 					}, nil
 				}
 			}
@@ -470,16 +470,6 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 		Deletes:    observe.deletes,
 		Updates:    observe.updates,
 	}, nil
-	/*
-		return managed.ExternalObservation{
-			Ready:      true,
-			Exists:     exists,
-			Pending:    false,
-			Failed:     false,
-			HasData:    true,
-			IsUpToDate: true,
-		}, nil
-	*/
 }
 
 func (e *externalDevice) Create(ctx context.Context, mg resource.Managed, obs managed.ExternalObservation) error {
@@ -510,28 +500,6 @@ func (e *externalDevice) Update(ctx context.Context, mg resource.Managed, obs ma
 	log := e.log.WithValues("Resource", mg.GetName())
 	log.Debug("Updating ...")
 
-	/*
-		cr, ok := mg.(*srlv1alpha1.Srl3Device)
-		if !ok {
-			return errors.New(errUnexpectedDevice)
-		}
-
-		crPaths, err := e.findPaths(cr.Spec.Device)
-		if err != nil {
-			return err
-		}
-	*/
-
-	// create k8s object
-	// processCreate
-	// 0. marshal/unmarshal data
-	// 1. transform the spec data to gnmi updates
-	/*
-		updates, err := e.processK8s(mg, crPaths, systemv1alpha1.E_GvkAction_Update)
-		if err != nil {
-			return errors.Wrap(err, errUpdateDevice)
-		}
-	*/
 	updates, err := e.getGvkUpate(mg, obs, ygotnddp.NddpSystem_ResourceAction_UPDATE)
 	if err != nil {
 		return errors.Wrap(err, errCreateDevice)
@@ -556,28 +524,6 @@ func (e *externalDevice) Delete(ctx context.Context, mg resource.Managed, obs ma
 	log := e.log.WithValues("Resource", mg.GetName())
 	log.Debug("Deleting ...", "obs", obs)
 
-	/*
-		cr, ok := mg.(*srlv1alpha1.Srl3Device)
-		if !ok {
-			return errors.New(errUnexpectedDevice)
-		}
-
-		crPaths, err := e.findPaths(cr.Spec.Device)
-		if err != nil {
-			return err
-		}
-	*/
-
-	// create k8s object
-	// processCreate
-	// 0. marshal/unmarshal data
-	// 1. transform the spec data to gnmi updates
-	/*
-		updates, err := e.processK8s(mg, crPaths, systemv1alpha1.E_GvkAction_Delete)
-		if err != nil {
-			return errors.Wrap(err, errDeleteDevice)
-		}
-	*/
 	updates, err := e.getGvkUpate(mg, obs, ygotnddp.NddpSystem_ResourceAction_DELETE)
 	if err != nil {
 		return errors.Wrap(err, errCreateDevice)

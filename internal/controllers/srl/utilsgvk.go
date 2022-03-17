@@ -14,6 +14,8 @@ import (
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
 
+// getGvkUpate returns an update to the system cache using the k8s api naming convetion and the nddp system spec
+// gvk -> group, version, kind, namespace, name
 func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalObservation, action ygotnddp.E_NddpSystem_ResourceAction) ([]*gnmi.Update, error) {
 	e.log.Debug("getGvkUpate")
 
@@ -64,6 +66,7 @@ func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalOb
 	}, nil
 }
 
+// getSpec return the spec as a string
 func getSpec(mg resource.Managed) (*string, error) {
 	cr, ok := mg.(*srlv1alpha1.Srl3Device)
 	if !ok {
@@ -76,6 +79,7 @@ func getSpec(mg resource.Managed) (*string, error) {
 	return ygot.String(string(spec)), nil
 }
 
+// getPaths returns a slice of string from the gnmi path slice
 func getPaths(gnmiPaths []*gnmi.Path) []string {
 	paths := []string{}
 	for _, p := range gnmiPaths {
@@ -84,6 +88,7 @@ func getPaths(gnmiPaths []*gnmi.Path) []string {
 	return paths
 }
 
+// getPaths returns a map of updates with the rootPath as key
 func getUpdates(gnmiUpdates []*gnmi.Update) (map[string]*ygotnddp.NddpSystem_Gvk_Update, error) {
 	updates := map[string]*ygotnddp.NddpSystem_Gvk_Update{}
 	for _, u := range gnmiUpdates {

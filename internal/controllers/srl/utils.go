@@ -12,10 +12,6 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/resource"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
-
-	//srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
-
-	//systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
@@ -380,23 +376,4 @@ func validateUpdate(u *gnmi.Update) *gnmi.Update {
 	}
 
 	return u
-}
-
-// Make a deep copy from in into out object.
-func DeepCopy(in interface{}) (interface{}, error) {
-	if in == nil {
-		return nil, errors.New("in cannot be nil")
-	}
-	//fmt.Printf("json copy input %v\n", in)
-	bytes, err := json.Marshal(in)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to marshal input data")
-	}
-	var out interface{}
-	err = json.Unmarshal(bytes, &out)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to unmarshal to output data")
-	}
-	//fmt.Printf("json copy output %v\n", out)
-	return out, nil
 }
