@@ -22,6 +22,7 @@ import (
 
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/yndd/ndd-yang/pkg/yparser"
+	"github.com/yndd/nddp-srl3/internal/cache"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -61,7 +62,7 @@ func (s *server) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.SetRespon
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 		*/
-		if err := s.cache.ValidateUpdate(target, req.GetReplace(), true, false, true); err != nil {
+		if err := s.cache.ValidateUpdate(target, req.GetReplace(), true, false, cache.Origin_GnmiServer); err != nil {
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 

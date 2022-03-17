@@ -21,6 +21,7 @@ import (
 
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/ygot/ygot"
+	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/shared"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
@@ -56,14 +57,14 @@ func (r *reconciler) validateCreate(resource *ygotnddp.NddpSystem_Gvk) (ygot.Val
 func (r *reconciler) validateDelete(paths []*gnmi.Path) error {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 
-	return r.cache.ValidateDelete(crDeviceName, paths, false)
+	return r.cache.ValidateDelete(crDeviceName, paths, cache.Origin_Reconciler)
 }
 
 // validateUpdate updates the current config/goStruct and validates the result
 func (r *reconciler) validateUpdate(updates []*gnmi.Update, jsonietf bool) error {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 
-	return r.cache.ValidateUpdate(crDeviceName, updates, false, jsonietf, false)
+	return r.cache.ValidateUpdate(crDeviceName, updates, false, jsonietf, cache.Origin_Reconciler)
 }
 
 /* we dont want to do a double diff, once in the controller and 2nd in the reconciler

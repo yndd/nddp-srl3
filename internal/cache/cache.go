@@ -21,6 +21,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type Origin string
+
+const (
+	Origin_Subscription Origin = "subsription"
+	Origin_Reconciler   Origin = "reconciler"
+	Origin_GnmiServer   Origin = "gnmiserver"
+)
+
 type Cache interface {
 	Lock()
 	Unlock()
@@ -33,8 +41,8 @@ type Cache interface {
 
 	// data manipulation methods
 	ValidateCreate(target string, x interface{}) (ygot.ValidatedGoStruct, error)
-	ValidateUpdate(target string, updates []*gnmi.Update, replace, jsonietf, store bool) error
-	ValidateDelete(target string, paths []*gnmi.Path, store bool) error
+	ValidateUpdate(target string, updates []*gnmi.Update, replace, jsonietf bool, origin Origin) error
+	ValidateDelete(target string, paths []*gnmi.Path, origin Origin) error
 
 	// system cache methods
 	GetSystemExhausted(target string) (*uint32, error)
@@ -148,7 +156,7 @@ func (c *cache) ValidateCreate(target string, x interface{}) (ygot.ValidatedGoSt
 
 	curGoStruct := c.GetValidatedGoStruct(target)
 
-	fmt.Printf("ValidateCreate: target: %s data: %v\n", target, x)
+	//fmt.Printf("ValidateCreate: target: %s data: %v\n", target, x)
 	newConfig, err := json.Marshal(x)
 	if err != nil {
 		fmt.Printf("ValidateCreate: Marshal error %s\n", err.Error())
@@ -186,15 +194,15 @@ func (c *cache) ValidateCreate(target string, x interface{}) (ygot.ValidatedGoSt
 		fmt.Printf("ValidateCreate: validation error %s\n", err.Error())
 		return nil, err
 	}
-	fmt.Printf("ValidateCreate: all good\n")
+	//fmt.Printf("ValidateCreate: all good\n")
 	return newGoStruct, nil
 }
 
-func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, jsonietf, store bool) error {
+func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, jsonietf bool, origin Origin) error {
 	curGoStruct := c.GetValidatedGoStruct(target)
 
 	if curGoStruct == nil {
-		return errors.New("ValidateUpdate using empty go struct")
+		return fmt.Errorf("ValidateUpdate origin: %s using empty go struct", origin)
 	}
 	//fmt.Printf("ValidateUpdate deviceName: %s, goStruct: %v\n", target, curGoStruct)
 	jsonTree, err := ygot.ConstructIETFJSON(curGoStruct, &ygot.RFC7951JSONConfig{})
@@ -209,7 +217,7 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 	for _, u := range updates {
 		fullPath := cleanPath(u.GetPath())
 		val := u.GetVal()
-		fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
+		fmt.Printf("ValidateUpdate origin: %s: path: %s, val: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), val)
 	}
 
 	//var goStruct ygot.ValidatedGoStruct
@@ -217,7 +225,7 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 		fullPath := cleanPath(u.GetPath())
 		val := u.GetVal()
 
-		fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
+		fmt.Printf("ValidateUpdate origin: %s: path: %s, val: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), val)
 		//	if replace {
 		//		fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
 		//	}
@@ -270,13 +278,13 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 			*/
 
 			if err := m.JsonUnmarshaler(v, nodeStruct); err != nil {
-				fmt.Printf("unmarshal error: nodeStruct: %v\n", nodeStruct)
-				fmt.Printf("unmarshal error: path: %s, val: %v\n", fullPath, v)
+				fmt.Printf("ValidateUpdate origin: %s: unmarshal error: nodeStruct: %v\n", origin, nodeStruct)
+				fmt.Printf("ValidateUpdate origin: %s: unmarshal error: path: %s, val: %v\n", origin, fullPath, v)
 				vvvv, err := ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{})
 				if err != nil {
 					return errors.Wrap(err, "error in constructing IETF JSON tree from config struct:")
 				}
-				fmt.Printf("ValidateUpdate vvvv: %v\n", vvvv)
+				fmt.Printf("ValidateUpdate origin: %s vvvv: %v\n", origin, vvvv)
 				return errors.Wrap(err, "unmarshaling json data to config struct fails")
 			}
 			if err := nodeStruct.Validate(); err != nil {
@@ -312,7 +320,7 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 			}
 
 			if !replace {
-				fmt.Printf("ValidateUpdate scalar nodeVal: %v\n", nodeVal)
+				fmt.Printf("ValidateUpdate origin: %s scalar nodeVal: %v\n", origin, nodeVal)
 			}
 
 		}
@@ -343,10 +351,10 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 
 					if len(elem.GetKey()) == 0 {
 						// err is grpcstatus error
-						fmt.Printf("setPathWithoutAttribute: schemaName: %s, schemaKind: %s\n", schema.Name, schema.Kind.String())
+						fmt.Printf("ValidateUpdate origin: %s, setPathWithoutAttribute: schemaName: %s, schemaKind: %s\n", origin, schema.Name, schema.Kind.String())
 
 						if err := setPathWithoutAttribute(op, node, elem, nodeVal); err != nil {
-							fmt.Printf("setPathWithoutAttribute error: %v\n", err)
+							fmt.Printf("ValidateUpdate origin: %s: setPathWithoutAttribute error: %v\n", origin, err)
 							return err
 						}
 						// set defaults
@@ -364,16 +372,16 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 							}
 						}
 						if err := setDefaults(newNode, elem, newSchema, nodeVal); err != nil {
-							fmt.Printf("setPathWithoutAttribute setDefaults error: %v\n", err)
+							fmt.Printf("ValidateUpdate origin: %s: setPathWithoutAttribute setDefaults error: %v\n", origin, err)
 							return err
 						}
 
 						break
 					}
 					// err is grpcstatus error
-					fmt.Printf("setPathWithAttribute: schemaName: %s, schemaKind: %s\n", schema.Name, schema.Kind.String())
+					fmt.Printf("ValidateUpdate origin: %s: setPathWithAttribute: schemaName: %s, schemaKind: %s\n", origin, schema.Name, schema.Kind.String())
 					if err := setPathWithAttribute(op, node, elem, nodeVal, schema); err != nil {
-						fmt.Printf("setPathWithAttribute: error: %v\n", err)
+						fmt.Printf("ValidateUpdate origin: %s: setPathWithAttribute: error: %v\n", origin, err)
 						return err
 					}
 					break
@@ -382,8 +390,8 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 				if curNode, schema = getChildNode(node, schema, elem, true); curNode == nil {
 					return errors.Wrap(err, fmt.Sprintf("path elem not found: %v", elem))
 				}
-				fmt.Printf("ValidateUpdate: getChildNode after : %s, index: %d, elem: %v, node: %v\n", yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
-				fmt.Printf("ValidateUpdate: getChildNode after : %s, schemaDir: %v\n", yparser.GnmiPath2XPath(fullPath, true), schema.Dir)
+				fmt.Printf("ValidateUpdate origin: %s: getChildNode after : %s, index: %d, elem: %v, node: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
+				fmt.Printf("ValidateUpdate origin: %s: getChildNode after : %s, schemaDir: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), schema.Dir)
 			case []interface{}:
 				return errors.Wrap(err, fmt.Sprintf("incompatible path elem: %v", elem))
 			default:
@@ -391,15 +399,17 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 			}
 		}
 	}
-	fmt.Printf("ValidateUpdate updates finished\n")
+	fmt.Printf("ValidateUpdate origin: %s updates finished\n", origin)
 
 	jsonDump, err := json.Marshal(jsonTree)
 	if err != nil {
+		fmt.Printf("ValidateUpdate origin: %s marshal error :%v\n", origin, err)
 		return fmt.Errorf("error in marshaling IETF JSON tree to bytes: %v", err)
 	}
 
 	newGoStruct, err := m.NewConfigStruct(jsonDump, true)
 	if err != nil {
+		fmt.Printf("ValidateUpdate origin: %s creating gostruct error :%v\n", origin, err)
 		return fmt.Errorf("error in creating config struct from IETF JSON data: %v", err)
 	}
 
@@ -412,9 +422,10 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 	}
 
 	if newGoStruct == nil {
+		fmt.Printf("ValidateUpdate origin: %s subscription handler handleUpdates suicide empty goStruct\n", origin)
 		return errors.New("subscription handler handleUpdates suicide empty goStruct")
 	}
-	if store {
+	if origin == Origin_Subscription || origin == Origin_GnmiServer {
 		if print {
 			j, err := ygot.EmitJSON(newGoStruct, &ygot.EmitJSONConfig{
 				Format: ygot.RFC7951,
@@ -422,20 +433,20 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 			if err != nil {
 				fmt.Println(err)
 			}
-			fmt.Printf("ValidateUpdate jsonTree done: target %s, strore: %t \n, %s \n", target, store, j)
+			fmt.Printf("ValidateUpdate origin: %s jsonTree done: target %s \n, %s \n", origin, target, j)
 		}
 		c.UpdateValidatedGoStruct(target, newGoStruct, false)
-		fmt.Printf("ValidateUpdate stored\n")
+		fmt.Printf("ValidateUpdate origin: %s stored\n", origin)
 	}
 
 	return nil
 }
 
-func (c *cache) ValidateDelete(target string, paths []*gnmi.Path, store bool) error {
+func (c *cache) ValidateDelete(target string, paths []*gnmi.Path, origin Origin) error {
 	curGoStruct := c.GetValidatedGoStruct(target)
 
 	if curGoStruct == nil {
-		return errors.New("ValidateDelete using empty go struct")
+		return fmt.Errorf("ValidateDelete origin: %s using empty go struct", origin)
 	}
 
 	jsonTree, err := ygot.ConstructIETFJSON(curGoStruct, &ygot.RFC7951JSONConfig{})
@@ -449,7 +460,7 @@ func (c *cache) ValidateDelete(target string, paths []*gnmi.Path, store bool) er
 	for _, path := range paths {
 		var curNode interface{} = jsonTree
 		fullPath := cleanPath(path)
-		fmt.Printf("ValidateDelete path: %s\n", yparser.GnmiPath2XPath(fullPath, true))
+		fmt.Printf("ValidateDelete origin: %s path: %s\n", origin, yparser.GnmiPath2XPath(fullPath, true))
 
 		// we need to go back to the schemaroot for the next delete path
 		schema := m.SchemaTreeRoot
@@ -798,8 +809,8 @@ func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *y
 	// check schema for defaults and fallback to default if required
 	if schema.Kind.String() == "Leaf" {
 		// this is a leaf
-		if len(schema.Default) > 0 {
-			fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v\n", pathElem.GetName(), schema.Default, node)
+		if len(schema.Default) > 0 && !schema.ReadOnly() {
+			fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v, readOnly: %t\n", pathElem.GetName(), schema.Default, node, schema.ReadOnly())
 			setDefaultValue(node, pathElem.GetName(), schema)
 
 		}
@@ -807,9 +818,9 @@ func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *y
 	}
 	// this is a directory
 	for elem, schema := range schema.Dir {
-		fmt.Printf("ValidateUpdate: set default: elem: %s,  schema default: %v, pathElem: %s\n", elem, schema.Default, pathElem.Name)
+		fmt.Printf("ValidateUpdate: set default: elem: %s,  schema default: %v, pathElem: %s, readOnly: %t\n", elem, schema.Default, pathElem.Name, schema.ReadOnly())
 		// only update the default if the update path is not equal to the pathElem
-		if len(schema.Default) > 0 {
+		if len(schema.Default) > 0 && !schema.ReadOnly() {
 			// check if the default value is not part
 			nodeVal, ok := nodeVal.(map[string]interface{})
 			if ok {

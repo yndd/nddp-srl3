@@ -7,7 +7,7 @@ require (
 	github.com/openconfig/gnmi v0.0.0-20210914185457-51254b657b7d
 	github.com/openconfig/goyang v1.0.0
 	github.com/openconfig/ygot v0.16.0
-	github.com/yndd/ndd-runtime v0.3.1
+	github.com/yndd/ndd-runtime v0.3.2
 	google.golang.org/grpc v1.43.0
 	google.golang.org/protobuf v1.27.1
 	k8s.io/apimachinery v0.22.2

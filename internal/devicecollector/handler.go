@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
+	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/shared"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
@@ -88,7 +89,7 @@ func (c *collector) handleDeletes(crDeviceName string, resourceList map[string]*
 			}
 		*/
 		// validate deletes
-		if err := c.cache.ValidateDelete(crDeviceName, delPaths, true); err != nil {
+		if err := c.cache.ValidateDelete(crDeviceName, delPaths, cache.Origin_Subscription); err != nil {
 			return err
 		}
 
@@ -121,7 +122,7 @@ func (c *collector) handleUpdates(crDeviceName string, resourceList map[string]*
 		*/
 
 		// validate updates
-		if err := c.cache.ValidateUpdate(crDeviceName, updates, false, true, true); err != nil {
+		if err := c.cache.ValidateUpdate(crDeviceName, updates, false, true, cache.Origin_Subscription); err != nil {
 			return err
 		}
 

@@ -29,7 +29,6 @@ import (
 	"github.com/openconfig/ygot/util"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/openconfig/ygot/ytypes"
-	"github.com/pkg/errors"
 	"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/nddp-srl3/internal/shared"
@@ -165,36 +164,8 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 							},
 						},
 					}
-					return notifications, status.Error(codes.FailedPrecondition, "resource exist, but failed")
+					return notifications, status.Error(codes.FailedPrecondition, *resource.Reason)
 				}
-				/*
-					if resource.Action != ygotnddp.NddpSystem_ResourceAction_DELETE {
-						switch resource.Status {
-						case ygotnddp.NddpSystem_ResourceStatus_PENDING:
-							// the action did not complete so far
-							return nil, status.Error(codes.AlreadyExists, "")
-						}
-					} else {
-						switch resource.Status {
-						case ygotnddp.NddpSystem_ResourceStatus_FAILED:
-							// resource exists, but failed, return the spec data
-							notifications[0] = &gnmi.Notification{
-								Timestamp: ts,
-								Prefix:    prefix,
-								Update: []*gnmi.Update{
-									{
-										Path: &gnmi.Path{},
-										Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: []byte(*resource.Spec)}},
-									},
-								},
-							}
-							return notifications, status.Error(codes.FailedPrecondition, "resource exist, but failed")
-						case ygotnddp.NddpSystem_ResourceStatus_PENDING:
-							// the action did not complete so far
-							return nil, status.Error(codes.AlreadyExists, "")
-						}
-					}
-				*/
 			}
 		}
 	}
@@ -204,7 +175,7 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 	for i, path := range req.GetPath() {
 		if ygotCache {
 			fullPath := path
-			if fullPath.GetElem() == nil && fullPath.GetElement() != nil {
+			if fullPath.GetElem() == nil && fullPath.GetElem() != nil {
 				return nil, status.Error(codes.Unimplemented, "deprecated path element type is unsupported")
 			}
 
@@ -499,6 +470,7 @@ func (s *server) getSpecdata(crSystemDeviceName string, resource *systemv1alpha1
 }
 */
 
+/*
 func getDataFromRootPath(path *gnmi.Path, x1 interface{}) interface{} {
 	//fmt.Printf("gnmiserver getDataFromRootPath: %s, data: %v\n", yparser.GnmiPath2XPath(path, true), x1)
 	p := yparser.DeepCopyGnmiPath(path)
@@ -530,7 +502,9 @@ func getDataFromRootPath(path *gnmi.Path, x1 interface{}) interface{} {
 	}
 	return x1
 }
+*/
 
+/*
 func (s *server) getExhausted(crSystemDeviceName string) (int64, error) {
 
 	path := &gnmi.Path{
@@ -557,6 +531,7 @@ func (s *server) getExhausted(crSystemDeviceName string) (int64, error) {
 
 	return 0, nil
 }
+*/
 
 /*
 func (s *server) getTransaction(crSystemDeviceName, transactionName string) (*systemv1alpha1.Transaction, error) {
