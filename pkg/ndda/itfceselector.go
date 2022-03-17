@@ -84,6 +84,7 @@ func (x *selectedNodeItfces) GetSelectedNodeItfces() map[string][]itfceinfo.Itfc
 	return x.nodes
 }
 
+/*
 func getEndpointGroup(d srlv1alpha1.Srl3Device) string {
 	if s, ok := d.Labels[srlv1alpha1.LabelNddaEndpointGroup]; !ok {
 		return ""
@@ -99,6 +100,7 @@ func getDeviceName(d srlv1alpha1.Srl3Device) string {
 		return s
 	}
 }
+*/
 
 func (x *selectedNodeItfces) GetNodeItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo, nddaDeviceList srlv1alpha1.IFSrl3DeviceList) {
 	for _, d := range nddaDeviceList.GetDevices() {
@@ -148,7 +150,7 @@ func (x *selectedNodeItfces) GetNodeItfcesByNodeItfceSelector(nodeItfceSelectors
 					if !(i.Ethernet != nil && i.Ethernet.Aggregateid != nil) {
 						if deviceName == d.GetDeviceName() &&
 							itfceName == *i.Name {
-							fmt.Printf("getNodeItfcesByNodeItfceSelector selected: nodename: %s, itfcename: %s, lagmember: %v, nodename: %s\n", d.GetDeviceName(), *i.Name, *i.Lag, deviceName)
+							fmt.Printf("getNodeItfcesByNodeItfceSelector selected: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
 							x.addNodeItfce(d.GetDeviceName(), *i.Name, itfceinfo.NewItfceInfo(
 								itfceinfo.WithInnerVlanId(itfceInfo.InnerVlanId),
 								itfceinfo.WithOuterVlanId(itfceInfo.OuterVlanId),
