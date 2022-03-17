@@ -16,15 +16,7 @@ limitations under the License.
 
 package devicecollector
 
-import (
-	"fmt"
-	"strconv"
-
-	"github.com/openconfig/goyang/pkg/yang"
-
-	"github.com/openconfig/gnmi/proto/gnmi"
-)
-
+/*
 // getChildNode gets a node's child with corresponding schema specified by path
 // element. If not found and createIfNotExist is set as true, an empty node is
 // created and returned.
@@ -55,7 +47,8 @@ func (c *collector) getChildNode(node map[string]interface{}, schema *yang.Entry
 	nextNode = c.getKeyedListEntry(node, elem, createIfNotExist)
 	return nextNode, nextSchema
 }
-
+*/
+/*
 // getKeyedListEntry finds the keyed list entry in node by the name and key of
 // path elem. If entry is not found and createIfNotExist is true, an empty entry
 // will be created (the list will be created if necessary).
@@ -128,3 +121,4 @@ func (c *collector) getKeyedListEntry(node map[string]interface{}, elem *gnmi.Pa
 	node[elem.GetName()] = append(keyedList, m)
 	return m
 }
+*/

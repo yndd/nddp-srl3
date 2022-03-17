@@ -26,10 +26,7 @@ import (
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-runtime/pkg/logging"
-	"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/nddp-srl3/internal/cache"
-	deviceschema "github.com/yndd/nddp-srl3/pkg/yangschema"
-	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
@@ -87,9 +84,6 @@ type collector struct {
 	targetReceiveBuffer uint
 	retryTimer          time.Duration
 
-	nddpSchema   *yentry.Entry
-	deviceSchema *yentry.Entry
-
 	eventChs map[string]chan event.GenericEvent
 
 	stopCh chan bool // used to stop the child go routines if the device gets deleted
@@ -124,12 +118,6 @@ func New(t *types.TargetConfig, namespace string, paths []*string, opts ...Optio
 	if err := c.target.CreateGNMIClient(c.ctx, grpc.WithBlock()); err != nil { // TODO add dialopts
 		return nil, errors.Wrap(err, errCreateGnmiClient)
 	}
-
-	c.nddpSchema = nddpschema.InitRoot(nil,
-		yentry.WithLogging(c.log))
-
-	c.deviceSchema = deviceschema.InitRoot(nil,
-		yentry.WithLogging(c.log))
 
 	return c, nil
 }

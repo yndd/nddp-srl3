@@ -1540,8 +1540,8 @@ github.com/yndd/ndda-network v0.1.35/go.mod h1:kTxC7g33D2ULQE7ckxu2erlr6eQQwC+8W
 github.com/yndd/nddo-grpc v0.0.11/go.mod h1:EtOPd2XxbxDMLMNheomiDZBQCCtY0DRdOer3MOEsgH0=
 github.com/yndd/nddo-grpc v0.0.16/go.mod h1:EtOPd2XxbxDMLMNheomiDZBQCCtY0DRdOer3MOEsgH0=
 github.com/yndd/nddo-grpc v0.0.17/go.mod h1:EtOPd2XxbxDMLMNheomiDZBQCCtY0DRdOer3MOEsgH0=
-github.com/yndd/nddo-intent-runtime v0.0.2 h1:4IlG34A1uEMDZxEYq/yRpPb607U64B0oLqiq8Q2fMrA=
-github.com/yndd/nddo-intent-runtime v0.0.2/go.mod h1:btw+NbkjggmZZnTOwiSTf6FqemLEACFq1ATx1fX15wg=
+github.com/yndd/nddo-intent-runtime v0.0.4 h1:egTO9kFMsIsodZnur682pKC5vxg1n6Th8DFRHLzhFtY=
+github.com/yndd/nddo-intent-runtime v0.0.4/go.mod h1:btw+NbkjggmZZnTOwiSTf6FqemLEACFq1ATx1fX15wg=
 github.com/yndd/nddo-runtime v0.0.49/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC9bQQ2cOm0o=
 github.com/yndd/nddo-runtime v0.0.53/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC9bQQ2cOm0o=
 github.com/yndd/nddo-runtime v0.0.54/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC9bQQ2cOm0o=

@@ -1,9 +1,7 @@
 package devicecollector
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
@@ -11,11 +9,8 @@ import (
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 	"github.com/yndd/nddp-srl3/internal/shared"
-	systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -25,10 +20,12 @@ const (
 	unmanagedResource = "Unmanaged resource"
 )
 
+/*
 var (
 	pbRootPath     = &gnmi.Path{}
 	pbDevicePrefix = &gnmi.Path{Elem: []*gnmi.PathElem{{Name: "device"}}}
 )
+*/
 
 func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 	log := c.log.WithValues("target", c.target.Config.Name, "address", c.target.Config.Address)
@@ -201,6 +198,7 @@ func (c *collector) findManagedResource(xpath string, resourceList map[string]*y
 	return &matchedResourceName, nil
 }
 
+/*
 func (c *collector) getResourceList(crDeviceName string) ([]*systemv1alpha1.Gvk, error) {
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
@@ -214,6 +212,7 @@ func (c *collector) getResourceList(crDeviceName string) ([]*systemv1alpha1.Gvk,
 
 	return gvkresource.GetResourceList(rl)
 }
+*/
 
 func (c *collector) triggerReconcileEvent(resourceName string) error {
 
@@ -248,6 +247,7 @@ func getObject(gvk *gvkresource.GVK) client.Object {
 	}
 }
 
+/*
 func generateJson(u *gnmi.Update) ([]byte, error) {
 	var err error
 	var d interface{}
@@ -258,7 +258,8 @@ func generateJson(u *gnmi.Update) ([]byte, error) {
 	return json.Marshal(d)
 
 }
-
+*/
+/*
 func addData(d interface{}, pe []*gnmi.PathElem, val *gnmi.TypedValue) (interface{}, error) {
 	var err error
 	if len(pe) == 0 {
@@ -291,7 +292,8 @@ func addData(d interface{}, pe []*gnmi.PathElem, val *gnmi.TypedValue) (interfac
 		}
 	}
 }
-
+*/
+/*
 func addContainer(d interface{}, e string, elems []*gnmi.PathElem, val *gnmi.TypedValue) (interface{}, error) {
 	var err error
 	// initialize the data
@@ -310,7 +312,8 @@ func addContainer(d interface{}, e string, elems []*gnmi.PathElem, val *gnmi.Typ
 	//}
 
 }
-
+*/
+/*
 func addList(d interface{}, e string, k map[string]string, elems []*gnmi.PathElem, val *gnmi.TypedValue) (interface{}, error) {
 	var err error
 	//fmt.Printf("addList pathElem: %s, key: %v d: %v\n", e, k, d)
@@ -372,7 +375,8 @@ func addList(d interface{}, e string, k map[string]string, elems []*gnmi.PathEle
 		return nil, errors.New("list last value JSON unexpected data structure")
 	}
 }
-
+*/
+/*
 func addContainerValue(d interface{}, e string, val *gnmi.TypedValue) (interface{}, error) {
 	var err error
 	// check if the data was initialized
@@ -389,7 +393,8 @@ func addContainerValue(d interface{}, e string, val *gnmi.TypedValue) (interface
 		return nil, errors.New("container last value JSON unexpected data structure")
 	}
 }
-
+*/
+/*
 func addListValue(d interface{}, e string, k map[string]string, val *gnmi.TypedValue) (interface{}, error) {
 	// initialize the data
 	if reflect.TypeOf((d)) == nil {
@@ -430,7 +435,8 @@ func addListValue(d interface{}, e string, k map[string]string, val *gnmi.TypedV
 	}
 	return d, nil
 }
-
+*/
+/*
 func cleanPath(path *gnmi.Path) *gnmi.Path {
 	// clean the path for now to remove the module information from the pathElem
 	p := yparser.DeepCopyGnmiPath(path)
@@ -448,3 +454,4 @@ func cleanPath(path *gnmi.Path) *gnmi.Path {
 	}
 	return p
 }
+*/

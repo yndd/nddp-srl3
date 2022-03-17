@@ -66,7 +66,7 @@ type DeviceDriver interface {
 	WithLogger(log logging.Logger)
 	WithClient(c resource.ClientApplicator)
 	WithCh(reqCh chan shared.DeviceUpdate, respCh chan shared.DeviceResponse)
-	WithDeviceSchema(y *yentry.Entry)
+	//WithDeviceSchema(y *yentry.Entry)
 	WithEventCh(eventChs map[string]chan event.GenericEvent)
 	Start() error
 	Stop() error
@@ -93,11 +93,13 @@ func WithCh(reqCh chan shared.DeviceUpdate, respCh chan shared.DeviceResponse) O
 	}
 }
 
+/*
 func WithDeviceSchema(y *yentry.Entry) Option {
 	return func(o DeviceDriver) {
 		o.WithDeviceSchema(y)
 	}
 }
+*/
 
 func WithEventCh(eventChs map[string]chan event.GenericEvent) Option {
 	return func(o DeviceDriver) {
@@ -111,11 +113,11 @@ type deviceInfo struct {
 	//client    resource.ClientApplicator
 
 	// target info
-	namespace    string
-	target       *target.Target
-	paths        []*string
-	cache        cache.Cache
-	deviceSchema *yentry.Entry
+	namespace string
+	target    *target.Target
+	paths     []*string
+	cache     cache.Cache
+	//deviceSchema *yentry.Entry
 	// device info
 	device     device.Device
 	collector  devicecollector.DeviceCollector
@@ -291,12 +293,12 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	d.devices[crDeviceName] = &deviceInfo{
 		ctx: context.Background(),
 		//client:    d.client,
-		namespace:    du.Namespace,
-		paths:        subscriptions,
-		cache:        d.cache,
-		deviceSchema: d.deviceSchema,
-		stopCh:       make(chan bool),
-		log:          d.log,
+		namespace: du.Namespace,
+		paths:     subscriptions,
+		cache:     d.cache,
+		//deviceSchema: d.deviceSchema,
+		stopCh: make(chan bool),
+		log:    d.log,
 	}
 
 	// reference the device driver device

@@ -26,13 +26,10 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/logging"
 
 	//"github.com/yndd/ndd-yang/pkg/cache"
-	"github.com/yndd/ndd-yang/pkg/yentry"
 
 	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/device"
 	"github.com/yndd/nddp-srl3/internal/shared"
-	deviceschema "github.com/yndd/nddp-srl3/pkg/yangschema"
-	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
 	"google.golang.org/grpc"
 )
 
@@ -83,10 +80,6 @@ type reconciler struct {
 	cache     cache.Cache
 	ctx       context.Context
 
-	nddpSchema   *yentry.Entry
-	deviceSchema *yentry.Entry
-	//mutex       sync.Mutex
-
 	stopCh chan bool // used to stop the child go routines if the device gets deleted
 
 	log logging.Logger
@@ -107,12 +100,6 @@ func New(t *types.TargetConfig, namespace string, opts ...Option) (DeviceReconci
 	if err := r.target.CreateGNMIClient(r.ctx, grpc.WithBlock()); err != nil { // TODO add dialopts
 		return nil, errors.Wrap(err, errCreateGnmiClient)
 	}
-
-	r.nddpSchema = nddpschema.InitRoot(nil,
-		yentry.WithLogging(r.log))
-
-	r.deviceSchema = deviceschema.InitRoot(nil,
-		yentry.WithLogging(r.log))
 
 	return r, nil
 }
@@ -191,9 +178,6 @@ func (r *reconciler) run() error {
 
 				} else {
 					*exhausted--
-					if *exhausted < 0 {
-						*exhausted = 0
-					}
 					r.cache.SetSystemExhausted(crSystemDeviceName, *exhausted)
 				}
 			}
