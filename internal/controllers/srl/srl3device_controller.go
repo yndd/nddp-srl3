@@ -37,10 +37,14 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/reconciler/managed"
 	"github.com/yndd/ndd-runtime/pkg/resource"
 	"github.com/yndd/ndd-runtime/pkg/utils"
-
-	//"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/ndd-yang/pkg/yparser"
+	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
+	"github.com/yndd/nddp-srl3/internal/model"
+	"github.com/yndd/nddp-srl3/internal/shared"
+	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
+	"github.com/yndd/nddp-system/pkg/failedmsg"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
+	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
@@ -49,15 +53,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	cevent "sigs.k8s.io/controller-runtime/pkg/event"
-
-	//"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
-	"github.com/yndd/nddp-srl3/internal/model"
-	"github.com/yndd/nddp-srl3/internal/shared"
-	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
-	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
 
 const (
@@ -141,8 +137,7 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 }
 
 type validatorDevice struct {
-	log logging.Logger
-	//deviceSchema *yentry.Entry
+	log         logging.Logger
 	deviceModel *model.Model
 	systemModel *model.Model
 }
@@ -225,14 +220,11 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 // A connector is expected to produce an ExternalClient when its Connect method
 // is called.
 type connectorDevice struct {
-	log   logging.Logger
-	kube  client.Client
-	usage resource.Tracker
-	//deviceSchema *yentry.Entry
-	//nddpSchema   *yentry.Entry
+	log         logging.Logger
+	kube        client.Client
+	usage       resource.Tracker
 	deviceModel *model.Model
 	systemModel *model.Model
-	//y            yresource.Handler
 	newClientFn func(c *gnmitypes.TargetConfig) *target.Target
 	gnmiAddress string
 }
@@ -291,11 +283,9 @@ func (c *connectorDevice) Connect(ctx context.Context, mg resource.Managed) (man
 // An ExternalClient observes, then either creates, updates, or deletes an
 // external resource to ensure it reflects the managed resource's desired state.
 type externalDevice struct {
-	client  *target.Target
-	targets []string
-	log     logging.Logger
-	//deviceSchema *yentry.Entry
-	//nddpSchema   *yentry.Entry
+	client      *target.Target
+	targets     []string
+	log         logging.Logger
 	deviceModel *model.Model
 	systemModel *model.Model
 }
@@ -372,15 +362,24 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 					IsUpToDate: false,
 				}, nil
 			case codes.FailedPrecondition:
-				// the k8s resource exists but is in failed status, compare the response spec with current spec
-				// if the specs are equal return failed status and the reconcile loop will stop
-				// if the specs are not equal
-				//log.Debug("observing when using gnmic: resource failed")
+				// the k8s resource exists but is in failed status, we return the error message and the original spec
+				// given gnmi when an error occurs provides an empty response, we marshal the spec and the error message
+				// together and unmarshal it at the client
+				// the spec is used to compare the new spec against the spec hat failed and if a difference is seen we will retry
+				// if no difference is seen we stay in failed status
+				errMsg, err := failedmsg.UnMarshalErrorMsgWithSpec(er.Message())
+				if err != nil {
+					return managed.ExternalObservation{}, err
+				}
+				// we build a gnmi response to be able to reuse the observe code
+				resp = getGnmiResp(errMsg.Spec)
 				failedObserve, err := e.processObserve(*cr.Spec.Device, resp)
 				if err != nil {
 					return managed.ExternalObservation{}, err
 				}
-				if failedObserve.upToDate {
+
+				log.Debug("Failed Observe Response", "failedObserve", *failedObserve, "hasData", failedObserve.hasData, "upToDate", failedObserve.upToDate)
+				if !failedObserve.hasData || failedObserve.upToDate {
 					// there is no difference between the previous spec and the current spec, so we dont retry
 					// given the previous attempt failed
 					return managed.ExternalObservation{
@@ -388,11 +387,19 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 						Exists:     true,
 						Pending:    false,
 						Failed:     true,
-						Message:    er.Message(),
+						Message:    errMsg.Msg,
 						HasData:    false,
 						IsUpToDate: false,
 					}, nil
 				} else {
+					// debug first
+					for _, p := range failedObserve.deletes {
+						log.Debug("Failed Observe Response delete", "path", yparser.GnmiPath2XPath(p, true))
+					}
+					for _, u := range failedObserve.updates {
+						log.Debug("Failed Observe Response update", "path", yparser.GnmiPath2XPath(u.GetPath(), true))
+					}
+					// debug end
 					// this should trigger an update
 					return managed.ExternalObservation{
 						Ready:      true,
@@ -591,4 +598,20 @@ func (e *externalDevice) GetResourceList(ctx context.Context, mg resource.Manage
 	}
 
 	return nddpDevice.Gvk, nil
+}
+
+func getGnmiResp(msg string) *gnmi.GetResponse {
+	return &gnmi.GetResponse{
+		Notification: []*gnmi.Notification{
+			{
+				Timestamp: time.Now().UnixNano(),
+				Update: []*gnmi.Update{
+					{
+						Path: &gnmi.Path{},
+						Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: []byte(msg)}},
+					},
+				},
+			},
+		},
+	}
 }

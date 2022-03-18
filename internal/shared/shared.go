@@ -22,7 +22,6 @@ import (
 	"github.com/karimra/gnmic/types"
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
-	//"github.com/yndd/ndd-yang/pkg/yentry"
 )
 
 const (
@@ -70,10 +69,8 @@ type DeviceResponse struct {
 }
 
 type NddControllerOptions struct {
-	Logger logging.Logger
-	Poll   time.Duration
-	//DeviceSchema           *yentry.Entry
-	//NddpSchema             *yentry.Entry
+	Logger                 logging.Logger
+	Poll                   time.Duration
 	Namespace              string
 	GnmiAddress            string
 	DeviceDriverRequestCh  chan DeviceUpdate

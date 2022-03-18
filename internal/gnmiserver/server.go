@@ -26,10 +26,7 @@ import (
 	"github.com/pkg/errors"
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
-	//"github.com/yndd/ndd-yang/pkg/cache"
-	"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/nddp-srl3/internal/cache"
-	nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -51,12 +48,6 @@ func WithLogger(log logging.Logger) Option {
 	}
 }
 
-func WithDeviceSchema(y *yentry.Entry) Option {
-	return func(s Server) {
-		s.WithDeviceSchema(y)
-	}
-}
-
 func WithCache(c cache.Cache) Option {
 	return func(s Server) {
 		s.WithCache(c)
@@ -71,7 +62,6 @@ func WithEventChannels(e map[string]chan event.GenericEvent) Option {
 
 type Server interface {
 	WithLogger(log logging.Logger)
-	WithDeviceSchema(y *yentry.Entry)
 	WithCache(c cache.Cache)
 	WithEventChannels(e map[string]chan event.GenericEvent)
 	Start() error
@@ -102,9 +92,6 @@ type server struct {
 	// kubernetes
 	EventChannels map[string]chan event.GenericEvent
 
-	// rootSchema
-	deviceSchema *yentry.Entry
-	nddpSchema   *yentry.Entry
 	// schema
 	cache cache.Cache
 	//stateCache  *cache.Cache
@@ -135,9 +122,6 @@ func New(opts ...Option) Server {
 
 	s.ctx = context.Background()
 
-	s.nddpSchema = nddpschema.InitRoot(nil,
-		yentry.WithLogging(s.log))
-
 	return s
 }
 
@@ -147,10 +131,6 @@ func (s *server) WithLogger(log logging.Logger) {
 
 func (s *server) WithEventChannels(e map[string]chan event.GenericEvent) {
 	s.EventChannels = e
-}
-
-func (s *server) WithDeviceSchema(y *yentry.Entry) {
-	s.deviceSchema = y
 }
 
 func (s *server) WithCache(c cache.Cache) {

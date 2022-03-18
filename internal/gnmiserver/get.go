@@ -29,11 +29,11 @@ import (
 	"github.com/openconfig/ygot/util"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/openconfig/ygot/ytypes"
-	"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/nddp-srl3/internal/shared"
 
 	//systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
+	"github.com/yndd/nddp-system/pkg/failedmsg"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc/codes"
@@ -67,9 +67,6 @@ func (s *server) Get(ctx context.Context, req *gnmi.GetRequest) (*gnmi.GetRespon
 }
 
 func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
-	//var err error
-	updates := make([]*gnmi.Update, 0)
-
 	prefix := req.GetPrefix()
 	//origin := req.GetPrefix().GetOrigin()
 
@@ -84,15 +81,12 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 		return nil, status.Errorf(codes.Unavailable, "cache not ready")
 	}
 
-	var schema *yentry.Entry
 	var systemTarget string
 	// if the request is for the system resources per leaf we take the target/crDeviceName iso
 	// adding the system part
 	if strings.HasPrefix(target, shared.SystemNamespace) {
-		schema = s.nddpSchema
 		systemTarget = target
 	} else {
-		schema = s.deviceSchema
 		systemTarget = shared.GetCrSystemDeviceName(target)
 	}
 
@@ -154,17 +148,15 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 				case ygotnddp.NddpSystem_ResourceStatus_PENDING:
 					return nil, status.Error(codes.AlreadyExists, "")
 				case ygotnddp.NddpSystem_ResourceStatus_FAILED:
-					notifications[0] = &gnmi.Notification{
-						Timestamp: ts,
-						Prefix:    prefix,
-						Update: []*gnmi.Update{
-							{
-								Path: &gnmi.Path{},
-								Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_StringVal{StringVal: *resource.Spec}},
-							},
-						},
+					m := &failedmsg.Message{
+						Spec: *resource.Spec,
+						Msg:  *resource.Reason,
 					}
-					return notifications, status.Error(codes.FailedPrecondition, *resource.Reason)
+					errMsgSpec, err := m.Marshal()
+					if err != nil {
+						return nil, status.Error(codes.Internal, err.Error())
+					}
+					return nil, status.Error(codes.FailedPrecondition, string(errMsgSpec))
 				}
 			}
 		}
@@ -328,18 +320,7 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 				Update:    []*gnmi.Update{update},
 			}
 		} else {
-			x, err := s.cache.GetCache().GetJson(prefix.GetTarget(), prefix, path, schema)
-			if err != nil {
-				return nil, status.Error(codes.Internal, err.Error())
-			}
-			if updates, err = appendUpdateResponse(x, path, updates); err != nil {
-				return nil, status.Error(codes.Internal, err.Error())
-			}
-			notifications[i] = &gnmi.Notification{
-				Timestamp: ts,
-				Prefix:    prefix,
-				Update:    updates,
-			}
+			return nil, status.Error(codes.Unimplemented, "")
 		}
 
 	}
@@ -350,220 +331,3 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 	// the resource does not exists
 	return notifications, status.Error(codes.NotFound, "resource does not exist")
 }
-
-func appendUpdateResponse(data interface{}, path *gnmi.Path, updates []*gnmi.Update) ([]*gnmi.Update, error) {
-	var err error
-	var d []byte
-	//fmt.Printf("data1: %v\n", data)
-	if data != nil {
-		d, err = json.Marshal(data)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	//fmt.Printf("data2: %v\n", string(d))
-
-	upd := &gnmi.Update{
-		Path: path,
-		Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: d}},
-	}
-	updates = append(updates, upd)
-	return updates, nil
-}
-
-/*
-func (s *server) getResourceList(crSystemDeviceName string) ([]*systemv1alpha1.Gvk, error) {
-	rl, err := s.cache.GetCache().GetJson(crSystemDeviceName,
-		&gnmi.Path{Target: crSystemDeviceName},
-		&gnmi.Path{Elem: []*gnmi.PathElem{{Name: "gvk"}}},
-		s.nddpSchema)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
-	}
-
-	return gvkresource.GetResourceList(rl)
-}
-*/
-/*
-func (s *server) getResource(crSystemDeviceName, gvkName string) (*systemv1alpha1.Gvk, error) {
-	rl, err := s.cache.GetCache().GetJson(crSystemDeviceName,
-		&gnmi.Path{Target: crSystemDeviceName},
-		&gnmi.Path{Elem: []*gnmi.PathElem{
-			{Name: "gvk", Key: map[string]string{"name": gvkName}},
-		}},
-		s.nddpSchema)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
-	}
-	return gvkresource.GetResource(rl)
-}
-*/
-/*
-func (s *server) getResourceName(crSystemDeviceName string, reqpath *gnmi.Path) ([]*gnmi.Update, error) {
-	// provide a string from the gnmi Path, we expect a single path in the GetRequest
-	reqPath := yparser.GnmiPath2XPath(reqpath, true)
-	// initialize the variables which are used to keep track of the matched strings
-	matchedResourceName := ""
-	matchedResourcePath := ""
-	// loop over the resourceList
-	resourceList, err := s.getResourceList(crSystemDeviceName)
-	if err != nil {
-		return nil, err
-	}
-	for _, resource := range resourceList {
-		if resource != nil {
-			//s.log.Debug("K8sResource GetResourceName Match", "resource", resource)
-			// check if the string is contained in the path
-			// TOOOODOOOO UPDATE TO the new Paths procesure
-			if strings.Contains(reqPath, resource.Paths[0]) {
-				// if there is a better match we use the better match
-				if len(resource.Paths) > len(matchedResourcePath) {
-					matchedResourcePath = resource.Paths[0]
-					matchedResourceName = resource.Name
-				}
-			}
-		}
-	}
-	//s.log.Debug("K8sResource GetResourceName Match", "ResourceName", matchedResourceName)
-
-	d, err := json.Marshal(nddv1.ResourceName{
-		Name: matchedResourceName,
-	})
-	if err != nil {
-		return nil, err
-	}
-	updates := make([]*gnmi.Update, 0)
-	upd := &gnmi.Update{
-		Path: reqpath,
-		Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: d}},
-	}
-	updates = append(updates, upd)
-	return updates, nil
-}
-*/
-/*
-func (s *server) getSpecdata(crSystemDeviceName string, resource *systemv1alpha1.Gvk) (interface{}, error) {
-	x1, err := s.cache.GetCache().GetJson(
-		crSystemDeviceName,
-		&gnmi.Path{Target: crSystemDeviceName},
-		&gnmi.Path{
-			Elem: []*gnmi.PathElem{
-				{Name: "gvk", Key: map[string]string{"name": resource.Name}},
-			},
-		},
-		s.nddpSchema)
-	if err != nil {
-		return nil, err
-	}
-	// remove the rootPath data
-	//	rootPath, err := xpath.ToGNMIPath(resource.Rootpath)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	switch x := x1.(type) {
-	//	case map[string]interface{}:
-	//		x1 = x["data"]
-	//		x1 = getDataFromRootPath(rootPath, x1)
-	//	}
-	return x1, nil
-}
-*/
-
-/*
-func getDataFromRootPath(path *gnmi.Path, x1 interface{}) interface{} {
-	//fmt.Printf("gnmiserver getDataFromRootPath: %s, data: %v\n", yparser.GnmiPath2XPath(path, true), x1)
-	p := yparser.DeepCopyGnmiPath(path)
-	if len(p.GetElem()) > 0 {
-		hasKey := false
-		if len(p.GetElem()[0].GetKey()) > 0 {
-			hasKey = true
-		}
-		switch x := x1.(type) {
-		case map[string]interface{}:
-			for k, v := range x {
-				if k == p.GetElem()[0].GetName() {
-					// when the spec data rootpath last element has a key
-					// we need to return the first element of the list
-					if hasKey {
-						switch x := v.(type) {
-						case []interface{}:
-							x1 = x[0]
-						}
-					} else {
-						x1 = x[p.GetElem()[0].GetName()]
-					}
-				}
-			}
-
-		}
-		p.Elem = p.Elem[1:]
-		x1 = getDataFromRootPath(p, x1)
-	}
-	return x1
-}
-*/
-
-/*
-func (s *server) getExhausted(crSystemDeviceName string) (int64, error) {
-
-	path := &gnmi.Path{
-		Elem: []*gnmi.PathElem{{Name: "exhausted"}},
-	}
-
-	n, err := s.cache.GetCache().Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
-	if err != nil {
-		return 0, err
-	}
-	if n != nil {
-		for _, u := range n.GetUpdate() {
-			val, err := yparser.GetValue(u.GetVal())
-			if err != nil {
-				return 0, err
-			}
-			switch v := val.(type) {
-			case int64:
-				return v, nil
-			}
-		}
-		return 0, errors.New("unknown type in cache")
-	}
-
-	return 0, nil
-}
-*/
-
-/*
-func (s *server) getTransaction(crSystemDeviceName, transactionName string) (*systemv1alpha1.Transaction, error) {
-	path := &gnmi.Path{
-		Elem: []*gnmi.PathElem{{Name: "transaction", Key: map[string]string{"name": transactionName}}},
-	}
-
-	n, err := s.cache.GetCache().Query(crSystemDeviceName, &gnmi.Path{Target: crSystemDeviceName}, path)
-	if err != nil {
-		return nil, err
-	}
-	resp := &gnmi.GetResponse{
-		Notification: []*gnmi.Notification{n},
-	}
-	return transaction.GetTransactionFromGnmiResponse(resp)
-}
-*/
-/*
-func (s *server) deleteResource(crSystemDeviceName, resourceGvkName string) error {
-	n := &gnmi.Notification{
-		Timestamp: time.Now().UnixNano(),
-		Prefix:    &gnmi.Path{Target: crSystemDeviceName},
-		Delete: []*gnmi.Path{
-			{
-				Elem: []*gnmi.PathElem{{Name: "gvk", Key: map[string]string{"name": resourceGvkName}}},
-			},
-		},
-	}
-
-	if err := s.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
-		return errors.Wrap(err, "cache delete failed")
-	}
-	return nil
-}
-*/

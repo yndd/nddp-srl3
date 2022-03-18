@@ -298,7 +298,6 @@ func (e *externalDevice) processObserve(specData interface{}, resp *gnmi.GetResp
 	if err != nil {
 		return &observe{hasData: false}, err
 	}
-
 	return &observe{
 		hasData:  true,
 		upToDate: len(deletes) == 0 && len(updates) == 0,

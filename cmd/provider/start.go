@@ -106,19 +106,10 @@ var startCmd = &cobra.Command{
 		}
 		zlog.Info("gnmi address", "address", gnmiAddress)
 
-		// initialize the root schema
-		//deviceSchema := yangschema.InitRoot(nil,
-		//	yentry.WithLogging(logging.NewLogrLogger(zlog.WithName("srl3yangschema"))))
-
-		//nddpSchema := nddpschema.InitRoot(nil,
-		//	yentry.WithLogging(logging.NewLogrLogger(zlog.WithName("nddpyangschema"))))
-
 		nddcopts := &shared.NddControllerOptions{
-			Logger:    logging.NewLogrLogger(zlog.WithName("srl")),
-			Poll:      pollInterval,
-			Namespace: namespace,
-			//DeviceSchema:           deviceSchema,
-			//NddpSchema:             nddpSchema,
+			Logger:                 logging.NewLogrLogger(zlog.WithName("srl")),
+			Poll:                   pollInterval,
+			Namespace:              namespace,
 			GnmiAddress:            gnmiAddress,
 			DeviceDriverRequestCh:  make(chan shared.DeviceUpdate),
 			DeviceDriverResponseCh: make(chan shared.DeviceResponse),

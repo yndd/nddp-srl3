@@ -113,7 +113,7 @@ func (r *reconciler) updateResourceStatus(resource *ygotnddp.NddpSystem_Gvk, rec
 		if err := r.cache.UpdateSystemResourceStatus(crSystemDeviceName, *resource.Name, reconcileErr.Error(), ygotnddp.NddpSystem_ResourceStatus_FAILED); err != nil {
 			return err
 		}
-		r.log.Debug("reconciler error", "error", reconcileErr)
+		log.Debug("reconciler error", "error", reconcileErr)
 		return nil
 	}
 	// transaction succeeded

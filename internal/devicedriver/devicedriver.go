@@ -32,8 +32,6 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/resource"
 
-	//"github.com/yndd/ndd-yang/pkg/cache"
-	"github.com/yndd/ndd-yang/pkg/yentry"
 	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/device"
 	"github.com/yndd/nddp-srl3/internal/device/srl"
@@ -46,8 +44,6 @@ import (
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-
-	pb "github.com/openconfig/gnmi/proto/gnmi"
 )
 
 const (
@@ -66,7 +62,6 @@ type DeviceDriver interface {
 	WithLogger(log logging.Logger)
 	WithClient(c resource.ClientApplicator)
 	WithCh(reqCh chan shared.DeviceUpdate, respCh chan shared.DeviceResponse)
-	//WithDeviceSchema(y *yentry.Entry)
 	WithEventCh(eventChs map[string]chan event.GenericEvent)
 	Start() error
 	Stop() error
@@ -93,14 +88,6 @@ func WithCh(reqCh chan shared.DeviceUpdate, respCh chan shared.DeviceResponse) O
 	}
 }
 
-/*
-func WithDeviceSchema(y *yentry.Entry) Option {
-	return func(o DeviceDriver) {
-		o.WithDeviceSchema(y)
-	}
-}
-*/
-
 func WithEventCh(eventChs map[string]chan event.GenericEvent) Option {
 	return func(o DeviceDriver) {
 		o.WithEventCh(eventChs)
@@ -117,7 +104,6 @@ type deviceInfo struct {
 	target    *target.Target
 	paths     []*string
 	cache     cache.Cache
-	//deviceSchema *yentry.Entry
 	// device info
 	device     device.Device
 	collector  devicecollector.DeviceCollector
@@ -135,9 +121,8 @@ type deviceInfo struct {
 
 type deviceDriver struct {
 	// gnmi target
-	devices      map[string]*deviceInfo
-	cache        cache.Cache
-	deviceSchema *yentry.Entry
+	devices map[string]*deviceInfo
+	cache   cache.Cache
 	// deviceUpdate
 	deviceDriverRequestCh  chan shared.DeviceUpdate
 	deviceDriverResponseCh chan shared.DeviceResponse
@@ -186,10 +171,6 @@ func (d *deviceDriver) WithCh(reqCh chan shared.DeviceUpdate, respCh chan shared
 	d.deviceDriverResponseCh = respCh
 }
 
-func (d *deviceDriver) WithDeviceSchema(y *yentry.Entry) {
-	d.deviceSchema = y
-}
-
 func (d *deviceDriver) WithEventCh(eventChs map[string]chan event.GenericEvent) {
 	d.eventChs = eventChs
 }
@@ -201,7 +182,6 @@ func (d *deviceDriver) Start() error {
 	d.server = gnmiserver.New(
 		gnmiserver.WithCache(d.cache),
 		gnmiserver.WithLogger(d.log),
-		gnmiserver.WithDeviceSchema(d.deviceSchema),
 	)
 	if err := d.server.Start(); err != nil {
 		return err
@@ -433,7 +413,7 @@ func (d *deviceDriver) deleteDevice(du shared.DeviceUpdate) error {
 }
 
 func getSystemModel() *model.Model {
-	modelData := []*pb.ModelData{
+	modelData := []*gnmi.ModelData{
 		{
 			Name:         "nddp-system.yang",
 			Organization: "ndd",
@@ -450,9 +430,9 @@ func getSystemModel() *model.Model {
 }
 
 func getDeviceModel(cap []*gnmi.ModelData) *model.Model {
-	modelData := make([]*pb.ModelData, 0)
+	modelData := make([]*gnmi.ModelData, 0)
 	for _, c := range cap {
-		modelData = append(modelData, &pb.ModelData{
+		modelData = append(modelData, &gnmi.ModelData{
 			Name:         c.GetName(),
 			Organization: c.GetOrganization(),
 			Version:      c.GetVersion(),

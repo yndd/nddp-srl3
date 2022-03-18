@@ -28,7 +28,7 @@ import (
 
 func (r *reconciler) getSpecdata(resource *ygotnddp.NddpSystem_Gvk) (interface{}, error) {
 	spec := resource.Spec
-	r.log.Debug("getSpecdata", "specdata", *spec)
+	//r.log.Debug("getSpecdata", "specdata", *spec)
 	var x1 interface{}
 	if err := json.Unmarshal([]byte(*spec), &x1); err != nil {
 		r.log.Debug("getSpecdata", "error", err)
@@ -47,8 +47,8 @@ func (r *reconciler) validateCreate(resource *ygotnddp.NddpSystem_Gvk) (ygot.Val
 		return nil, err
 	}
 
-	r.log.Debug("validateCreate", "x   ", x)
-	r.log.Debug("validateCreate", "spec", *resource.Spec)
+	//r.log.Debug("validateCreate", "x   ", x)
+	//r.log.Debug("validateCreate", "spec", *resource.Spec)
 
 	return r.cache.ValidateCreate(crDeviceName, x)
 }

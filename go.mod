@@ -3,13 +3,13 @@ module github.com/yndd/nddp-srl3
 go 1.17
 
 require (
-	github.com/golang/protobuf v1.5.2
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/openconfig/gnmi v0.0.0-20210914185457-51254b657b7d
 	github.com/openconfig/goyang v1.0.0
 	github.com/openconfig/ygot v0.16.0
 	github.com/yndd/ndd-runtime v0.3.3
 	google.golang.org/grpc v1.43.0
-	google.golang.org/protobuf v1.27.1
+	google.golang.org/protobuf v1.27.1 // indirect
 	k8s.io/apimachinery v0.22.2
 	sigs.k8s.io/controller-runtime v0.9.3
 )
@@ -26,7 +26,7 @@ require (
 	github.com/yndd/ndd-yang v0.2.7
 	github.com/yndd/ndda-network v0.1.35
 	github.com/yndd/nddo-runtime v0.0.73
-	github.com/yndd/nddp-system v0.2.1
+	github.com/yndd/nddp-system v0.2.3
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.22.2
 	k8s.io/client-go v0.22.2
