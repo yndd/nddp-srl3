@@ -18,13 +18,13 @@ package srl
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
+	gapi "github.com/karimra/gnmic/api"
 	"github.com/karimra/gnmic/target"
 	gutils "github.com/karimra/gnmic/utils"
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 
+	"github.com/AlekSi/pointer"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/gnmi/proto/gnmi_ext"
 	"github.com/pkg/errors"
@@ -50,6 +50,10 @@ const (
 	errGnmiCreateSetRequest    = "gnmi create set request error"
 	errGnmiSet                 = "gnmi set error "
 	errGnmiCreateDeleteRequest = "gnmi create delete request error"
+
+	//
+	swVersionPath = "/platform/control/software-version"
+	chassisPath   = "/platform/chassis"
 )
 
 func init() {
@@ -99,89 +103,12 @@ func (d *srl) Capabilities(ctx context.Context) ([]*gnmi.ModelData, error) {
 
 func (d *srl) Discover(ctx context.Context) (*ndrv1.DeviceDetails, error) {
 	d.log.Debug("Discover SRL details ...")
-	var err error
-	var p string
-	var req *gnmi.GetRequest
-	var rsp *gnmi.GetResponse
-	devDetails := &ndrv1.DeviceDetails{
-		Type: nddv1.DeviceTypePtr(DeviceType),
-	}
-
-	p = "/system/app-management/application[name=idb_server]"
-	req, err = gnmic.CreateGetRequest(&p, utils.StringPtr(State), utils.StringPtr(encoding))
+	dDetails, err := d.getDeviceDetails(ctx)
 	if err != nil {
-		d.log.Debug(errGnmiCreateGetRequest, "error", err)
-		return nil, errors.Wrap(err, errGnmiCreateGetRequest)
+		return nil, err
 	}
-	rsp, err = d.target.Get(ctx, req)
-	if err != nil {
-		d.log.Debug(errGnmiGet, "error", err)
-		return nil, errors.Wrap(err, errGnmiGet)
-	}
-	u, err := gnmic.HandleGetResponse(rsp)
-	if err != nil {
-		d.log.Debug(errGnmiHandleGetResponse, "error", err)
-		return nil, errors.Wrap(err, errGnmiHandleGetResponse)
-	}
-	for _, update := range u {
-		// we expect a single response in the get since we target the explicit resource
-		switch x := update.Values["application"].(type) {
-		case map[string]interface{}:
-			for k, v := range x {
-				sk := strings.Split(k, ":")[len(strings.Split(k, ":"))-1]
-				switch sk {
-				case "version":
-					d.log.Info("set sw version type...")
-					devDetails.SwVersion = &strings.Split(fmt.Sprintf("%v", v), "-")[0]
-				}
-			}
-		}
-		d.log.Debug("gnmi idb application information", "update response", update)
-	}
-	d.log.Debug("Device details", "sw version", devDetails.SwVersion)
-
-	p = "/platform/chassis"
-	req, err = gnmic.CreateGetRequest(&p, utils.StringPtr(State), utils.StringPtr(encoding))
-	if err != nil {
-		d.log.Debug(errGnmiCreateGetRequest, "error", err)
-		return nil, errors.Wrap(err, errGnmiCreateGetRequest)
-	}
-	rsp, err = d.target.Get(ctx, req)
-	if err != nil {
-		d.log.Debug(errGnmiGet, "error", err)
-		return nil, errors.Wrap(err, errGnmiGet)
-	}
-
-	u, err = gnmic.HandleGetResponse(rsp)
-	if err != nil {
-		d.log.Debug(errGnmiHandleGetResponse, "error", err)
-		return nil, errors.Wrap(err, errGnmiHandleGetResponse)
-	}
-	for _, update := range u {
-		// we expect a single response in the get since we target the explicit resource
-		switch x := update.Values["chassis"].(type) {
-		case map[string]interface{}:
-			for k, v := range x {
-				sk := strings.Split(k, ":")[len(strings.Split(k, ":"))-1]
-				switch sk {
-				case "type":
-					d.log.Debug("set hardware type...")
-					devDetails.Kind = utils.StringPtr(fmt.Sprintf("%v", v))
-				case "serial-number":
-					d.log.Debug("set serial number...")
-					devDetails.SerialNumber = utils.StringPtr(fmt.Sprintf("%v", v))
-				case "mac-address":
-					d.log.Debug("set mac address...")
-					devDetails.MacAddress = utils.StringPtr(fmt.Sprintf("%v", v))
-				default:
-				}
-			}
-		}
-		d.log.Debug("gnmi platform information", "update response", update)
-	}
-	d.log.Debug("Device details", "device details", devDetails)
-
-	return devDetails, nil
+	d.log.Debug("SRL %s discoverd: %+v", d.target.Config.Name, dDetails)
+	return dDetails, nil
 }
 
 func (d *srl) GetConfig(ctx context.Context) (interface{}, error) {
@@ -333,4 +260,41 @@ func (d *srl) SetGnmi(ctx context.Context, u []*gnmi.Update, p []*gnmi.Path) (*g
 	}
 	//d.log.Debug("set response:", "resp", resp)
 	return resp, nil
+}
+
+func (d *srl) getDeviceDetails(ctx context.Context) (*ndrv1.DeviceDetails, error) {
+	req, err := gapi.NewGetRequest(
+		gapi.Path(swVersionPath),
+		gapi.Path(chassisPath),
+		gapi.Encoding("ascii"),
+		gapi.DataType("state"),
+	)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.target.Get(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	devDetails := &ndrv1.DeviceDetails{
+		Type: nddv1.DeviceTypePtr(DeviceType),
+	}
+	for _, notif := range resp.GetNotification() {
+		for _, upd := range notif.GetUpdate() {
+			p := gutils.GnmiPathToXPath(upd.GetPath(), true)
+			switch p {
+			case "/platform/control/software-version":
+				if devDetails.SwVersion == nil {
+					devDetails.SwVersion = pointer.ToString(upd.GetVal().GetStringVal())
+				}
+			case "/platform/chassis/type":
+				devDetails.Kind = pointer.ToString(upd.GetVal().GetStringVal())
+			case "/platform/chassis/serial-number":
+				devDetails.SerialNumber = pointer.ToString(upd.GetVal().GetStringVal())
+			case "/platform/chassis/hw-mac-address":
+				devDetails.MacAddress = pointer.ToString(upd.GetVal().GetStringVal())
+			}
+		}
+	}
+	return devDetails, nil
 }
