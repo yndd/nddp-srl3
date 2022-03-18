@@ -19,7 +19,6 @@ package devicedriver
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -457,7 +456,7 @@ func (ddd *deviceInfo) validateDeviceConfig() error {
 		return err
 	}
 
-	fmt.Println(string(config))
+	//fmt.Println(string(config))
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 
