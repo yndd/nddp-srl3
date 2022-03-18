@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-runtime/pkg/resource"
 	"github.com/yndd/ndd-yang/pkg/yparser"
+	"github.com/yndd/nddp-srl3/internal/controllers/device/rootpaths"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
@@ -23,18 +24,12 @@ type observe struct {
 	updates  []*gnmi.Update
 }
 
-func (v *validatorDevice) getRootPaths(x interface{}) ([]*gnmi.Path, error) {
-	jsonTree, err := v.processData(x)
-	if err != nil {
-		v.log.Debug("error in constructing IETF JSON tree from config struct", "error", err)
-		return nil, errors.Wrap(err, "error in constructing IETF JSON tree from config struct")
-	}
-
-	//e.log.Debug("jsonTree", "jsonTree", jsonTree)
-
+func (v *validatorDevice) getRootPaths(x *gnmi.Notification) ([]*gnmi.Path, error) {
 	schema := v.deviceModel.SchemaTreeRoot
-	paths := make([]*gnmi.Path, 0)
-	return getChildNode(paths, jsonTree, schema, 0, true)
+	rootConfigElement := rootpaths.ConfigElementHierarchyFromGnmiUpdate(schema, x)
+	result := rootConfigElement.GetRootPaths()
+
+	return result, nil
 }
 
 //process Spec data marshals the data and remove the prent hierarchical keys

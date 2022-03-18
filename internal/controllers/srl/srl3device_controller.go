@@ -30,6 +30,7 @@ import (
 	gnmitypes "github.com/karimra/gnmic/types"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/gnmi/proto/gnmi_ext"
+	"github.com/openconfig/ygot/ygot"
 	"github.com/pkg/errors"
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 	"github.com/yndd/ndd-runtime/pkg/event"
@@ -178,7 +179,22 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 		log.Debug("ValidateRootPaths resourceList", "resourceName", resourceName)
 	}
 
-	crRootPaths, err := v.getRootPaths(cr.Spec.Device)
+	b, err := json.Marshal(cr.Spec.Device)
+	if err != nil {
+		return managed.ValidateRootPathsObservation{}, err
+	}
+	srldevice := &ygotsrl.Device{}
+	err = v.deviceModel.JsonUnmarshaler(b, srldevice)
+	if err != nil {
+		return managed.ValidateRootPathsObservation{}, err
+	}
+
+	gnmiNotifications, err := ygot.TogNMINotifications(srldevice, time.Now().UnixNano(), ygot.GNMINotificationsConfig{UsePathElem: true})
+	if err != nil {
+		return managed.ValidateRootPathsObservation{}, err
+	}
+
+	crRootPaths, err := v.getRootPaths(gnmiNotifications[0])
 	if err != nil {
 		return managed.ValidateRootPathsObservation{}, err
 	}
@@ -189,30 +205,9 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 		rootPaths = append(rootPaths, yparser.GnmiPath2XPath(crRootPath, true))
 	}
 
-	hierPaths, err := getHierPaths(mg, crRootPaths, resourceList)
-	if err != nil {
-		return managed.ValidateRootPathsObservation{}, err
-	}
-	//log.Debug("ValidateRootPaths", "hierPaths", hierPaths)
-
-	hierRootPaths := map[string][]string{}
-	for rootPath, crRootPaths := range hierPaths {
-		for _, crRootPath := range crRootPaths {
-			//log.Debug("findPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
-			if strings.HasPrefix(yparser.GnmiPath2XPath(crRootPath, true), "/routing-policy") {
-				break
-			}
-			hierRootPaths[rootPath] = append(hierRootPaths[rootPath], yparser.GnmiPath2XPath(crRootPath, true))
-		}
-	}
-
-	printRootPaths(mg.GetName(), rootPaths)
-	printHierPaths(mg.GetName(), hierRootPaths)
-
 	return managed.ValidateRootPathsObservation{
 		Changed:     false,
 		RootPaths:   rootPaths,
-		HierPaths:   hierRootPaths,
 		DeletePaths: []*gnmi.Path{}, // TODO find delta
 	}, nil
 }
