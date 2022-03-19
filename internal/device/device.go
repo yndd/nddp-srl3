@@ -19,10 +19,10 @@ package device
 import (
 	"context"
 
+	gapi "github.com/karimra/gnmic/api"
 	"github.com/karimra/gnmic/target"
-	ndddvrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
-
 	"github.com/openconfig/gnmi/proto/gnmi"
+	ndddvrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 )
@@ -34,28 +34,16 @@ type Device interface {
 	WithTarget(target *target.Target)
 	// WithLogging initializes the device logging
 	WithLogging(log logging.Logger)
-	// retrieve device capabilities
-	Capabilities(ctx context.Context) ([]*gnmi.ModelData, error)
 	// Discover, discovers the device and its respective data
 	Discover(ctx context.Context) (*ndddvrv1.DeviceDetails, error)
+	// retrieve device supported models using gNMI capabilities RPC
+	SupportedModels(ctx context.Context) ([]*gnmi.ModelData, error)
 	// GetConfig, gets the config from the device
 	GetConfig(ctx context.Context) (interface{}, error)
 	// Get, gets the gnmi path from the tree
-	Get(ctx context.Context, p *string) (map[string]interface{}, error)
-	// Get, gets the gnmi path from the tree
-	GetGnmi(ctx context.Context, p []*gnmi.Path) (map[string]interface{}, error)
-	// Update, updates the gnmi path from the tree with the respective data
-	//Update(ctx context.Context, u []*config.Update) (*gnmi.SetResponse, error)
-	// Delete, deletes the gnmi path from the tree
-	UpdateGnmi(ctx context.Context, u []*gnmi.Update) (*gnmi.SetResponse, error)
-	// Delete, deletes the gnmi path from the tree
-	//Delete(ctx context.Context, p []*config.Path) (*gnmi.SetResponse, error)
-	// Delete, deletes the gnmi path from the tree
-	DeleteGnmi(ctx context.Context, p []*gnmi.Path) (*gnmi.SetResponse, error)
+	GNMIGet(ctx context.Context, opts ...gapi.GNMIOption) (*gnmi.GetResponse, error)
 	// Set creates a single transaction for updates and deletes
-	//Set(ctx context.Context, u []*config.Update, p []*config.Path) (*gnmi.SetResponse, error)
-	// Set creates a single transaction for updates and deletes
-	SetGnmi(ctx context.Context, u []*gnmi.Update, p []*gnmi.Path) (*gnmi.SetResponse, error)
+	GNMISet(ctx context.Context, updates []*gnmi.Update, deletes []*gnmi.Path) (*gnmi.SetResponse, error)
 }
 
 var Devices = map[nddv1.DeviceType]Initializer{}
