@@ -66,7 +66,7 @@ func (ce *configElement) isKey() bool {
 		return false
 	}
 	// check the keys of the parent configElement if the names is listed there
-	for k, _ := range ce.parent.keys {
+	for k := range ce.parent.keys {
 		if ce.name == k {
 			result = true
 		}

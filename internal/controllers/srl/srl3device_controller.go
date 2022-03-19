@@ -19,7 +19,6 @@ package srl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"strings"
 
@@ -141,27 +140,6 @@ type validatorDevice struct {
 	log         logging.Logger
 	deviceModel *model.Model
 	systemModel *model.Model
-}
-
-func printRootPaths(crName string, crRootPaths []string) {
-	fmt.Println("++++++++++++++++++++++++++++++++++++++")
-	fmt.Printf("rootPaths for cr: %s\n", crName)
-	for _, p := range crRootPaths {
-		fmt.Printf("  rootPath: %s\n", p)
-	}
-	fmt.Println("++++++++++++++++++++++++++++++++++++++")
-}
-
-func printHierPaths(crName string, crHierPaths map[string][]string) {
-	fmt.Println("++++++++++++++++++++++++++++++++++++++")
-	fmt.Printf("hierPaths for cr: %s\n", crName)
-	for p, hierPaths := range crHierPaths {
-		for _, hierPath := range hierPaths {
-			fmt.Printf("  rootPath: %s hierPath: %s\n", p, hierPath)
-		}
-	}
-	fmt.Println("++++++++++++++++++++++++++++++++++++++")
-
 }
 
 // ValidateResourceIndexes validates if the indexes of a resource got changed
