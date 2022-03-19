@@ -15,7 +15,6 @@ require (
 )
 
 require (
-	github.com/AlekSi/pointer v1.2.0
 	github.com/google/gnxi v0.0.0-20200508145201-92c6d0d3ec3b
 	github.com/google/go-cmp v0.5.7
 	github.com/karimra/gnmic v0.24.1
@@ -37,6 +36,7 @@ require (
 	cloud.google.com/go/compute v1.3.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
 	cloud.google.com/go/storage v1.18.2 // indirect
+	github.com/AlekSi/pointer v1.2.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20210920160938-87db9fbc61c7 // indirect
