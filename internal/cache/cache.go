@@ -351,7 +351,7 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 
 					if len(elem.GetKey()) == 0 {
 						// err is grpcstatus error
-						fmt.Printf("ValidateUpdate origin: %s, setPathWithoutAttribute: schemaName: %s, schemaKind: %s\n", origin, schema.Name, schema.Kind.String())
+						//fmt.Printf("ValidateUpdate origin: %s, setPathWithoutAttribute: schemaName: %s, schemaKind: %s\n", origin, schema.Name, schema.Kind.String())
 
 						if err := setPathWithoutAttribute(op, node, elem, nodeVal); err != nil {
 							fmt.Printf("ValidateUpdate origin: %s: setPathWithoutAttribute error: %v\n", origin, err)
@@ -379,7 +379,7 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 						break
 					}
 					// err is grpcstatus error
-					fmt.Printf("ValidateUpdate origin: %s: setPathWithAttribute: schemaName: %s, schemaKind: %s\n", origin, schema.Name, schema.Kind.String())
+					//	fmt.Printf("ValidateUpdate origin: %s: setPathWithAttribute: schemaName: %s, schemaKind: %s\n", origin, schema.Name, schema.Kind.String())
 					if err := setPathWithAttribute(op, node, elem, nodeVal, schema); err != nil {
 						fmt.Printf("ValidateUpdate origin: %s: setPathWithAttribute: error: %v\n", origin, err)
 						return err
@@ -390,8 +390,8 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 				if curNode, schema = getChildNode(node, schema, elem, true); curNode == nil {
 					return errors.Wrap(err, fmt.Sprintf("path elem not found: %v", elem))
 				}
-				fmt.Printf("ValidateUpdate origin: %s: getChildNode after : %s, index: %d, elem: %v, node: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
-				fmt.Printf("ValidateUpdate origin: %s: getChildNode after : %s, schemaDir: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), schema.Dir)
+				//fmt.Printf("ValidateUpdate origin: %s: getChildNode after : %s, index: %d, elem: %v, node: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), i, elem, curNode)
+				//fmt.Printf("ValidateUpdate origin: %s: getChildNode after : %s, schemaDir: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), schema.Dir)
 			case []interface{}:
 				return errors.Wrap(err, fmt.Sprintf("incompatible path elem: %v", elem))
 			default:
@@ -563,7 +563,7 @@ func setPathWithoutAttribute(op gnmi.UpdateResult_Operation, curNode map[string]
 	nodeValAsTree, nodeValIsTree := nodeVal.(map[string]interface{})
 	if op == gnmi.UpdateResult_REPLACE || !hasElem || !nodeValIsTree {
 		curNode[pathElem.Name] = nodeVal
-		fmt.Printf("ValidateUpdate: curNode: %v, nodeVal: %v\n", curNode, nodeVal)
+		//fmt.Printf("ValidateUpdate: curNode: %v, nodeVal: %v\n", curNode, nodeVal)
 		return nil
 	}
 	targetAsTree, ok := target.(map[string]interface{})
@@ -810,7 +810,7 @@ func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *y
 	if schema.Kind.String() == "Leaf" {
 		// this is a leaf
 		if len(schema.Default) > 0 && !schema.ReadOnly() {
-			fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v, readOnly: %t\n", pathElem.GetName(), schema.Default, node, schema.ReadOnly())
+			//fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v, readOnly: %t\n", pathElem.GetName(), schema.Default, node, schema.ReadOnly())
 			setDefaultValue(node, pathElem.GetName(), schema)
 
 		}
@@ -818,7 +818,7 @@ func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *y
 	}
 	// this is a directory
 	for elem, schema := range schema.Dir {
-		fmt.Printf("ValidateUpdate: set default: elem: %s,  schema default: %v, pathElem: %s, readOnly: %t\n", elem, schema.Default, pathElem.Name, schema.ReadOnly())
+		//fmt.Printf("ValidateUpdate: set default: elem: %s,  schema default: %v, pathElem: %s, readOnly: %t\n", elem, schema.Default, pathElem.Name, schema.ReadOnly())
 		// only update the default if the update path is not equal to the pathElem
 		if len(schema.Default) > 0 && !schema.ReadOnly() {
 			// check if the default value is not part
@@ -827,7 +827,7 @@ func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *y
 				// this is a json value
 				// this is a default and the default was not part of the json value we add the default in the jsonTree
 				if _, ok := nodeVal[elem]; !ok {
-					fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v\n", elem, schema.Default, node)
+					//fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v\n", elem, schema.Default, node)
 					if err := setDefaultValue(node, elem, schema); err != nil {
 						return err
 					}
@@ -835,7 +835,7 @@ func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *y
 			} else {
 				// this is a scalar value
 				if pathElem.Name != elem {
-					fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v\n", elem, schema.Default, node)
+					//fmt.Printf("ValidateUpdate: set default value: elem: %s, schema default: %v, node: %v\n", elem, schema.Default, node)
 					if err := setDefaultValue(node, elem, schema); err != nil {
 						return err
 					}
@@ -847,7 +847,7 @@ func setDefaults(node map[string]interface{}, pathElem *gnmi.PathElem, schema *y
 }
 
 func setDefaultValue(node map[string]interface{}, elem string, schema *yang.Entry) error {
-	fmt.Printf("ValidateUpdate: default elem: %s, val: %v, type: %s\n", elem, schema.Default, schema.Type.Kind.String())
+	//fmt.Printf("ValidateUpdate: default elem: %s, val: %v, type: %s\n", elem, schema.Default, schema.Type.Kind.String())
 	var nodeVal interface{}
 	nodeVal = schema.Default[0]
 	switch schema.Type.Kind.String() {
@@ -859,7 +859,7 @@ func setDefaultValue(node map[string]interface{}, elem string, schema *yang.Entr
 		if nodeVal, err = value.ToScalar(&gnmi.TypedValue{Value: &gnmi.TypedValue_BoolVal{BoolVal: v}}); err != nil {
 			return errors.Wrap(err, "cannot convert leaf node to scalar type")
 		}
-		fmt.Printf("ValidateUpdate: elem: %s nodeVal: %#v\n", elem, nodeVal)
+		//fmt.Printf("ValidateUpdate: elem: %s nodeVal: %#v\n", elem, nodeVal)
 	case "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64":
 		d, err := strconv.Atoi(schema.Default[0])
 		if err != nil {

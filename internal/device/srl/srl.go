@@ -24,7 +24,6 @@ import (
 	gutils "github.com/karimra/gnmic/utils"
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 
-	"github.com/AlekSi/pointer"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/gnmi/proto/gnmi_ext"
 	"github.com/pkg/errors"
@@ -50,7 +49,7 @@ const (
 	errGnmiCreateDeleteRequest = "gnmi create delete request error"
 
 	//
-	swVersionPath = "/platform/control/software-version"
+	swVersionPath = "/platform/control[slot=A]/software-version"
 	chassisPath   = "/platform/chassis"
 )
 
@@ -105,7 +104,7 @@ func (d *srl) Discover(ctx context.Context) (*ndrv1.DeviceDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	d.log.Debug("SRL %s discoverd: %+v", d.target.Config.Name, dDetails)
+	d.log.Debug("SRL %s discoverd: %+v", d.target.Config.Name, *dDetails)
 	return dDetails, nil
 }
 
@@ -198,16 +197,16 @@ func (d *srl) getDeviceDetails(ctx context.Context) (*ndrv1.DeviceDetails, error
 		for _, upd := range notif.GetUpdate() {
 			p := gutils.GnmiPathToXPath(upd.GetPath(), true)
 			switch p {
-			case "/platform/control/software-version":
+			case "platform/control/software-version":
 				if devDetails.SwVersion == nil {
-					devDetails.SwVersion = pointer.ToString(upd.GetVal().GetStringVal())
+					devDetails.SwVersion = utils.StringPtr(upd.GetVal().GetStringVal())
 				}
-			case "/platform/chassis/type":
-				devDetails.Kind = pointer.ToString(upd.GetVal().GetStringVal())
-			case "/platform/chassis/serial-number":
-				devDetails.SerialNumber = pointer.ToString(upd.GetVal().GetStringVal())
-			case "/platform/chassis/hw-mac-address":
-				devDetails.MacAddress = pointer.ToString(upd.GetVal().GetStringVal())
+			case "platform/chassis/type":
+				devDetails.Kind = utils.StringPtr(upd.GetVal().GetStringVal())
+			case "platform/chassis/serial-number":
+				devDetails.SerialNumber = utils.StringPtr(upd.GetVal().GetStringVal())
+			case "platform/chassis/hw-mac-address":
+				devDetails.MacAddress = utils.StringPtr(upd.GetVal().GetStringVal())
 			}
 		}
 	}
