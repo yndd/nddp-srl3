@@ -19,11 +19,13 @@ type configElement struct {
 	name string
 	// keys and key values of the configElements PathElement
 	keys map[string]string
+	// the value of leaf elements
+	value *gnmi.TypedValue
 }
 
 // NewConfigElement helper function for the generation of new configElements
 func NewConfigElement(name string, parent *configElement, keys map[string]string) *configElement {
-	return &configElement{name: name, children: map[string]*configElement{}, parent: parent, PathAndSchema: nil, keys: keys}
+	return &configElement{name: name, children: map[string]*configElement{}, parent: parent, PathAndSchema: nil, keys: keys, value: nil}
 }
 
 // getHierarchicalOutput_internal produces a hierarchical string representation from this along
@@ -40,17 +42,19 @@ func (ce *configElement) getHierarchicalOutput_internal(level int, indentor stri
 	for i := 0; i <= level; i++ {
 		indent += indentor
 	}
-	result += fmt.Sprintf("%s %s %s {hasNonKeyChilds: %s, IsLeaf: %s, ChildCount: %d, IsKey: %s, hasOnlyKeyChilds: %s, hasLeafChilds: %s, hasNonKeyLeafChilds: %s}\n",
+	result += fmt.Sprintf("%s %s %s = %s {hasNonKeyChilds: %s, IsLeaf: %s, ChildCount: %d, IsKey: %s, hasOnlyKeyChilds: %s, hasLeafChilds: %s, hasNonKeyLeafChilds: %s, isDefault: %s}\n",
 		indent,
 		ce.name,
 		ce.getKeysAsString(),
+		ce.value.GetStringVal(),
 		bool2string(ce.hasNonKeyChilds()),
 		bool2string(ce.isLeaf()),
 		ce.getChildCount(),
 		bool2string(ce.isKey()),
 		bool2string(ce.hasOnlyKeyChilds()),
 		bool2string(ce.hasLeafChilds()),
-		bool2string(ce.hasNonKeyLeafChilds()),
+		bool2string(ce.hasNonKeyAndDefaultLeafChilds()),
+		bool2string(ce.isDefault()),
 	)
 	for _, cce := range ce.children {
 		result += cce.getHierarchicalOutput_internal(level+1, indentor)
@@ -80,6 +84,15 @@ func (ce *configElement) isLeaf() bool {
 	return len(ce.children) <= 0
 }
 
+func (ce *configElement) isDefault() bool {
+	for _, defval := range ce.schema.Default {
+		if ce.value.GetStringVal() == defval {
+			return true
+		}
+	}
+	return false
+}
+
 // GetRootPaths determines the segnificant, the RootPaths out of the
 // configElements structure
 func (ce *configElement) GetRootPaths() []*gnmi.Path {
@@ -89,7 +102,7 @@ func (ce *configElement) GetRootPaths() []*gnmi.Path {
 	if ce.isLeaf() {
 		return result
 	}
-	if ce.hasNonKeyLeafChilds() {
+	if ce.hasNonKeyAndDefaultLeafChilds() {
 		// if the config Element has Childs which are not used as Key, add it's path
 		result = append(result, ce.path)
 	} else if ce.hasOnlyKeyChilds() {
@@ -105,10 +118,10 @@ func (ce *configElement) GetRootPaths() []*gnmi.Path {
 	return result
 }
 
-// hasNonKeyLeafChilds checks if there is any Leaf child that is not used as a key
-func (ce *configElement) hasNonKeyLeafChilds() bool {
+// hasNonKeyAndDefaultLeafChilds checks if there is any Leaf child that is not used as a key and does not carry the default value
+func (ce *configElement) hasNonKeyAndDefaultLeafChilds() bool {
 	for _, c := range ce.children {
-		if c.isLeaf() && !c.isKey() {
+		if c.isLeaf() && !c.isKey() && !c.isDefault() {
 			return true
 		}
 	}
@@ -156,13 +169,13 @@ func (ce *configElement) getLevel() int {
 }
 
 // Add to be called on the Root configElem with PathAndSchema elements to Add them to the hierarchical tree.
-func (ce *configElement) Add(pas *PathAndSchema) {
+func (ce *configElement) Add(pas *PathAndSchema, value *gnmi.TypedValue) {
 	// delegate to add_internal enriching call with index = 0
-	ce.add_internal(pas, 0)
+	ce.add_internal(pas, value, 0)
 }
 
 // Add to be called on the Root configElem with PathAndSchema elements to Add them to the hierarchical tree.
-func (ce *configElement) add_internal(pas *PathAndSchema, index int) {
+func (ce *configElement) add_internal(pas *PathAndSchema, value *gnmi.TypedValue, index int) {
 	// stop recursion if we are beyond the last PathElem
 	if len(pas.path.Elem)-1 == ce.getLevel() {
 		return
@@ -173,18 +186,22 @@ func (ce *configElement) add_internal(pas *PathAndSchema, index int) {
 	elemPath := &MyPathElem{pas.path.Elem[index]}
 
 	// check if a child with the generated hashCode() already exists
-	val, exists := ce.children[elemPath.hashCode()]
+	newCE, exists := ce.children[elemPath.hashCode()]
 
 	// if it does not, create it and add it as a child element
 	if !exists {
-		val = NewConfigElement(name, ce, elemPath.Key) // generate a new configElement with all required Information
+		newCE = NewConfigElement(name, ce, elemPath.Key) // generate a new configElement with all required Information
 		// set the Path and Schema information appropriately
-		val.PathAndSchema = getPathAndSchemaEntry(resolveRootSchemafromIntermediate(pas.schema), &gnmi.Path{Elem: pas.path.Elem[0 : index+1]})
+		newCE.PathAndSchema = getPathAndSchemaEntry(resolveRootSchemafromIntermediate(pas.schema), &gnmi.Path{Elem: pas.path.Elem[0 : index+1]})
 		// add the created configElement as a child
-		ce.children[elemPath.hashCode()] = val
+		ce.children[elemPath.hashCode()] = newCE
+		if len(pas.path.Elem)-1 == newCE.getLevel() {
+			newCE.value = value
+		}
+
 	}
 	// decent down the path in recursion, increasinbg the level via index
-	val.add_internal(pas, index+1)
+	newCE.add_internal(pas, value, index+1)
 }
 
 // hasLeafChilds checks is the configElement has terminal / leaf childs
