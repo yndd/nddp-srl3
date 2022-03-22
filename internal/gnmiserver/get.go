@@ -92,7 +92,10 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 	if len(extensions) > 0 {
 		// if the extension is set we check the resourcelist
 		// this is needed for the device driver to know when a create should be triggered
-		return nil, processExtension(systemTarget, s.cache, extensions)
+		err := processExtension(systemTarget, s.cache, extensions)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var goStruct ygot.GoStruct
