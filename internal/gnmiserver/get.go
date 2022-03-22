@@ -25,11 +25,14 @@ import (
 	"time"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
+	"github.com/openconfig/gnmi/proto/gnmi_ext"
 	"github.com/openconfig/gnmi/value"
 	"github.com/openconfig/ygot/util"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/openconfig/ygot/ytypes"
 	"github.com/yndd/ndd-yang/pkg/yparser"
+	"github.com/yndd/nddp-srl3/internal/cache"
+	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-srl3/internal/shared"
 
 	//systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
@@ -68,266 +71,188 @@ func (s *server) Get(ctx context.Context, req *gnmi.GetRequest) (*gnmi.GetRespon
 
 func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 	prefix := req.GetPrefix()
-	//origin := req.GetPrefix().GetOrigin()
+	target := prefix.GetTarget()
 
-	target := req.GetPrefix().GetTarget()
-	ygotCache := false
-	if strings.HasPrefix(target, "ygot") {
-		ygotCache = true
-		target = strings.ReplaceAll(target, "ygot.", "")
+	if !strings.HasPrefix(target, "ygot.") {
+		return nil, status.Error(codes.Unimplemented, "")
 	}
+	// we make sure that ygot procedures are used right now ...
+	// we will need to get rid of this later
+	target = strings.ReplaceAll(target, "ygot.", "")
 
 	if !s.cache.GetCache().GetCache().HasTarget(target) {
 		return nil, status.Errorf(codes.Unavailable, "cache not ready")
 	}
 
-	var systemTarget string
 	// if the request is for the system resources per leaf we take the target/crDeviceName iso
 	// adding the system part
-	if strings.HasPrefix(target, shared.SystemNamespace) {
-		systemTarget = target
-	} else {
-		systemTarget = shared.GetCrSystemDeviceName(target)
+	systemTarget := shared.GetCrSystemDeviceName(target)
+
+	extensions := req.GetExtension()
+	if len(extensions) > 0 {
+		// if the extension is set we check the resourcelist
+		// this is needed for the device driver to know when a create should be triggered
+		return nil, processExtension(systemTarget, s.cache, extensions)
 	}
 
 	var goStruct ygot.GoStruct
-	g := s.cache.GetValidatedGoStruct(target)
-	if g == nil {
-		goStruct = g
-	} else {
-		var err error
-		goStruct, err = ygot.DeepCopy(g)
-		if err != nil {
-			return nil, err
-		}
-	}
-	m := s.cache.GetModel(target)
+	goStruct = s.cache.GetValidatedGoStruct(target) // no DeepCopy required, since we get a deepcopy already
 
-	paths := req.GetPath()
-	notifications := make([]*gnmi.Notification, len(paths))
-
+	notifications := make([]*gnmi.Notification, len(req.GetPath()))
 	ts := time.Now().UnixNano()
 
-	// if the extension is set we check the resourcelist
-	// this is needed for the device driver to know when a create should be triggered
-	exists := true
-	if len(req.GetExtension()) > 0 {
-		// if the cache is exhausted we need to backoff
-		exhausted, err := s.cache.GetSystemExhausted(systemTarget)
-		if err != nil {
-			return nil, err
+	model := s.cache.GetModel(target)
+	// process all the paths from the given request
+	for i, path := range req.GetPath() {
+		fullPath := path
+		if fullPath.GetElem() == nil && fullPath.GetElem() != nil {
+			return nil, status.Error(codes.Unimplemented, "deprecated path element type is unsupported")
 		}
-		if *exhausted != 0 {
-			return nil, status.Errorf(codes.ResourceExhausted, "device exhausted")
+
+		nodes, err := ytypes.GetNode(model.SchemaTreeRoot, goStruct, fullPath,
+			&ytypes.GetPartialKeyMatch{},
+			&ytypes.GetHandleWildcards{},
+		)
+		if len(nodes) == 0 || err != nil || util.IsValueNil(nodes[0].Data) {
+			return nil, status.Errorf(codes.NotFound, "path %v not found: %v", fullPath, err)
 		}
-		gvkName := req.GetExtension()[0].GetRegisteredExt().GetMsg()
-		if string(gvkName) == gvkresource.Operation_GetResourceNameFromPath {
-			// procedure to get resource name
-			/*
-				updates, err := s.getResourceName(systemTarget, req.GetPath()[0])
-				if err != nil {
-					return nil, err
-				}
-				notifications[0] = &gnmi.Notification{
-					Timestamp: ts,
-					Prefix:    prefix,
-					Update:    updates,
-				}
-				return notifications, nil
-			*/
-			return nil, nil
-		} else {
-			resource, err := s.cache.GetSystemResource(systemTarget, string(gvkName))
-			if err != nil {
-				return nil, status.Error(codes.Internal, err.Error())
-			}
-			if resource == nil {
-				exists = false
+
+		// with wildcards allowed, we might get multiple entries per path query
+		// hence the updates are stored in a slice.
+		updates := []*gnmi.Update{}
+
+		// generate updates for all the retrieved nodes
+		for _, entry := range nodes {
+			var update *gnmi.Update
+			node := entry.Data
+			nodeStruct, isYgotStruct := node.(ygot.GoStruct)
+			// if not ok, this mut be a leafnode, meaning a scalar value instead of any ygot struct
+			if !isYgotStruct {
+				update, err = createLeafNodeUpdate(node, fullPath, model)
 			} else {
-				switch resource.Status {
-				case ygotnddp.NddpSystem_ResourceStatus_PENDING:
-					return nil, status.Error(codes.AlreadyExists, "")
-				case ygotnddp.NddpSystem_ResourceStatus_FAILED:
-					m := &failedmsg.Message{
-						Spec: *resource.Spec,
-						Msg:  *resource.Reason,
-					}
-					errMsgSpec, err := m.Marshal()
-					if err != nil {
-						return nil, status.Error(codes.Internal, err.Error())
-					}
-					return nil, status.Error(codes.FailedPrecondition, string(errMsgSpec))
-				}
+				// process ygot structs
+				update, err = createYgotStructNodeUpdate(nodeStruct, path, req.GetEncoding())
 			}
+			if err != nil {
+				return nil, err
+			}
+			updates = append(updates, update)
+		}
+		// generate the notification on a per path basis, as defined by the RFC
+		notifications[i] = &gnmi.Notification{
+			Timestamp: ts,
+			Prefix:    prefix,
+			Update:    updates,
 		}
 	}
+	return notifications, nil
+}
 
-	s.log.Debug("Get Cache", "ygot", ygotCache, "exists", exists)
-
-	for i, path := range req.GetPath() {
-		if ygotCache {
-			fullPath := path
-			if fullPath.GetElem() == nil && fullPath.GetElem() != nil {
-				return nil, status.Error(codes.Unimplemented, "deprecated path element type is unsupported")
-			}
-
-			nodes, err := ytypes.GetNode(m.SchemaTreeRoot, goStruct, fullPath,
-				&ytypes.GetPartialKeyMatch{},
-				&ytypes.GetHandleWildcards{},
-			)
-			if len(nodes) == 0 || err != nil || util.IsValueNil(nodes[0].Data) {
-				return nil, status.Errorf(codes.NotFound, "path %v not found: %v", fullPath, err)
-			}
-			node := nodes[0].Data
-
-			/*
-				for _, node := range nodes {
-					nodeStruct, ok := node.Data.(ygot.GoStruct)
-					// return a leaf node
-					if !ok {
-						var val *gnmi.TypedValue
-						switch kind := reflect.ValueOf(node).Kind(); kind {
-						case reflect.Ptr, reflect.Interface:
-							var err error
-							val, err = value.FromScalar(reflect.ValueOf(node).Elem().Interface())
-							if err != nil {
-								msg := fmt.Sprintf("leaf node %v does not contain a scalar type value: %v", path, err)
-								s.log.Debug("Error", "msg", msg)
-								return nil, status.Error(codes.Internal, msg)
-							}
-						case reflect.Int64:
-							enumMap, ok := m.EnumData[reflect.TypeOf(node).Name()]
-							if !ok {
-								return nil, status.Error(codes.Internal, "not a GoStruct enumeration type")
-							}
-							val = &gnmi.TypedValue{
-								Value: &gnmi.TypedValue_StringVal{
-									StringVal: enumMap[reflect.ValueOf(node).Int()].Name,
-								},
-							}
-						default:
-							return nil, status.Errorf(codes.Internal, "unexpected kind of leaf node type: %v %v", node, kind)
-						}
-						fmt.Println(val)
-					}
-					// Return IETF JSON by default.
-					jsonEncoder := func() (map[string]interface{}, error) {
-						return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{AppendModuleName: true})
-					}
-					jsonType := "IETF with moduleName"
-					//buildUpdate := func(b []byte) *gnmi.Update {
-					//	return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonIetfVal{JsonIetfVal: b}}}
-					//}
-
-					if req.GetEncoding() == gnmi.Encoding_JSON {
-						jsonEncoder = func() (map[string]interface{}, error) {
-							return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{})
-						}
-						jsonType = "IETF without moduleName"
-						//buildUpdate = func(b []byte) *gnmi.Update {
-						//	return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: b}}}
-						//}
-					}
-
-					jsonTree, err := jsonEncoder()
-					if err != nil {
-						msg := fmt.Sprintf("error in constructing %s JSON tree from requested node: %v", jsonType, err)
-						s.log.Debug("Error", "msg", msg)
-						return nil, status.Error(codes.Internal, msg)
-					}
-					jsonDump, err := json.Marshal(jsonTree)
-					if err != nil {
-						msg := fmt.Sprintf("error in marshaling %s JSON tree to bytes: %v", jsonType, err)
-						s.log.Debug("Error", "msg", msg)
-						return nil, status.Error(codes.Internal, msg)
-					}
-					fmt.Println(string(jsonDump))
-				}
-			*/
-
-			nodeStruct, ok := node.(ygot.GoStruct)
-			// Return leaf node.
-			if !ok {
-				var val *gnmi.TypedValue
-				switch kind := reflect.ValueOf(node).Kind(); kind {
-				case reflect.Ptr, reflect.Interface:
-					var err error
-					val, err = value.FromScalar(reflect.ValueOf(node).Elem().Interface())
-					if err != nil {
-						msg := fmt.Sprintf("leaf node %v does not contain a scalar type value: %v", path, err)
-						s.log.Debug("Error", "msg", msg)
-						return nil, status.Error(codes.Internal, msg)
-					}
-				case reflect.Int64:
-					enumMap, ok := m.EnumData[reflect.TypeOf(node).Name()]
-					if !ok {
-						return nil, status.Error(codes.Internal, "not a GoStruct enumeration type")
-					}
-					val = &gnmi.TypedValue{
-						Value: &gnmi.TypedValue_StringVal{
-							StringVal: enumMap[reflect.ValueOf(node).Int()].Name,
-						},
-					}
-				default:
-					return nil, status.Errorf(codes.Internal, "unexpected kind of leaf node type: %v %v", node, kind)
-				}
-
-				update := &gnmi.Update{Path: path, Val: val}
-				notifications[i] = &gnmi.Notification{
-					Timestamp: ts,
-					Prefix:    prefix,
-					Update:    []*gnmi.Update{update},
-				}
-				continue
-			}
-			// Return IETF JSON by default.
-			jsonEncoder := func() (map[string]interface{}, error) {
-				return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{AppendModuleName: true})
-			}
-			jsonType := "IETF with moduleName"
-			buildUpdate := func(b []byte) *gnmi.Update {
-				return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonIetfVal{JsonIetfVal: b}}}
-			}
-
-			if req.GetEncoding() == gnmi.Encoding_JSON {
-				jsonEncoder = func() (map[string]interface{}, error) {
-					return ygot.ConstructIETFJSON(nodeStruct, &ygot.RFC7951JSONConfig{})
-				}
-				jsonType = "IETF without moduleName"
-				buildUpdate = func(b []byte) *gnmi.Update {
-					return &gnmi.Update{Path: path, Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: b}}}
-				}
-			}
-
-			jsonTree, err := jsonEncoder()
+// processExtension the cache returned result might have gnmi extensions attached. Here these extension are being processsed
+func processExtension(systemTarget string, cache cache.Cache, extensions []*gnmi_ext.Extension) error {
+	// if the cache is exhausted we need to backoff
+	exhausted, err := cache.GetSystemExhausted(systemTarget)
+	if err != nil {
+		return err
+	}
+	if *exhausted != 0 {
+		return status.Errorf(codes.ResourceExhausted, "device exhausted")
+	}
+	gvkName := extensions[0].GetRegisteredExt().GetMsg()
+	if string(gvkName) == gvkresource.Operation_GetResourceNameFromPath {
+		// procedure to get resource name
+		/*
+			updates, err := s.getResourceName(systemTarget, req.GetPath()[0])
 			if err != nil {
-				msg := fmt.Sprintf("error in constructing %s JSON tree from requested node: %v", jsonType, err)
-				s.log.Debug("Error", "msg", msg)
-				return nil, status.Error(codes.Internal, msg)
+				return nil, err
 			}
-
-			jsonDump, err := json.Marshal(jsonTree)
-			if err != nil {
-				msg := fmt.Sprintf("error in marshaling %s JSON tree to bytes: %v", jsonType, err)
-				s.log.Debug("Error", "msg", msg)
-				return nil, status.Error(codes.Internal, msg)
-			}
-
-			update := buildUpdate(jsonDump)
-			notifications[i] = &gnmi.Notification{
+			notifications[0] = &gnmi.Notification{
 				Timestamp: ts,
 				Prefix:    prefix,
-				Update:    []*gnmi.Update{update},
+				Update:    updates,
 			}
-		} else {
-			return nil, status.Error(codes.Unimplemented, "")
-		}
+			return notifications, nil
+		*/
+		return nil
+	}
 
+	resource, err := cache.GetSystemResource(systemTarget, string(gvkName))
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
 	}
-	if exists {
-		// resource exists
-		return notifications, nil
+	if resource == nil {
+		return status.Error(codes.NotFound, "resource does not exist")
 	}
-	// the resource does not exists
-	return notifications, status.Error(codes.NotFound, "resource does not exist")
+	switch resource.Status {
+	case ygotnddp.NddpSystem_ResourceStatus_PENDING:
+		return status.Error(codes.AlreadyExists, "")
+	case ygotnddp.NddpSystem_ResourceStatus_FAILED:
+		m := &failedmsg.Message{
+			Spec: *resource.Spec,
+			Msg:  *resource.Reason,
+		}
+		errMsgSpec, err := m.Marshal()
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		return status.Error(codes.FailedPrecondition, string(errMsgSpec))
+	}
+	return nil
+}
+
+// createLeafNodeUpdate processes the list of returned nodes from the cache, which are Leaf Nodes, carrying terminal values
+// rather then ygot struct kind of data. From these, the resulting gnmi.update stucts are being populated.
+func createLeafNodeUpdate(node interface{}, path *gnmi.Path, model *model.Model) (*gnmi.Update, error) {
+	var val *gnmi.TypedValue
+	switch kind := reflect.ValueOf(node).Kind(); kind {
+	case reflect.Ptr, reflect.Interface:
+		var err error
+		val, err = value.FromScalar(reflect.ValueOf(node).Elem().Interface())
+		if err != nil {
+			msg := fmt.Sprintf("leaf node %v does not contain a scalar type value: %v", path, err)
+			return nil, status.Error(codes.Internal, msg)
+		}
+	case reflect.Int64:
+		enumMap, ok := model.EnumData[reflect.TypeOf(node).Name()]
+		if !ok {
+			return nil, status.Error(codes.Internal, "not a GoStruct enumeration type")
+		}
+		val = &gnmi.TypedValue{
+			Value: &gnmi.TypedValue_StringVal{
+				StringVal: enumMap[reflect.ValueOf(node).Int()].Name,
+			},
+		}
+	default:
+		return nil, status.Errorf(codes.Internal, "unexpected kind of leaf node type: %v %v", node, kind)
+	}
+
+	update := &gnmi.Update{Path: path, Val: val}
+	return update, nil
+}
+
+// createYgotStructNodeUpdate generated update messages from ygot structs.
+func createYgotStructNodeUpdate(nodeStruct ygot.GoStruct, path *gnmi.Path, requestedEncoding gnmi.Encoding) (*gnmi.Update, error) {
+	// take care of encoding
+	// default to JSON IETF, other option is plain JSON
+	var encoder Encoder
+	switch requestedEncoding {
+	case gnmi.Encoding_JSON:
+		encoder = &JSONEncoder{}
+	default:
+		encoder = &JSONIETFEncoder{}
+	}
+
+	jsonTree, err := encoder.Encode(nodeStruct)
+	if err != nil {
+		msg := fmt.Sprintf("error in constructing JSON tree from requested node: %v", err)
+		return nil, status.Error(codes.Internal, msg)
+	}
+
+	jsonDump, err := json.Marshal(jsonTree)
+	if err != nil {
+		msg := fmt.Sprintf("error in marshaling JSON tree to bytes: %v", err)
+		return nil, status.Error(codes.Internal, msg)
+	}
+
+	return encoder.BuildUpdate(path, jsonDump), nil
 }
