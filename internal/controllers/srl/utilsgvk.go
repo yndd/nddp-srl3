@@ -14,7 +14,7 @@ import (
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
 
-// getGvkUpate returns an update to the system cache using the k8s api naming convetion and the nddp system spec
+// getGvkUpate returns an update to the system cache using the k8s api naming convetion and the nddp system
 // gvk -> group, version, kind, namespace, name
 func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalObservation, action ygotnddp.E_NddpSystem_ResourceAction) ([]*gnmi.Update, error) {
 	e.log.Debug("getGvkUpate")
@@ -72,7 +72,7 @@ func getSpec(mg resource.Managed) (*string, error) {
 	if !ok {
 		return nil, errors.New(errUnexpectedDevice)
 	}
-	spec, err := json.Marshal(cr.Spec.Device)
+	spec, err := json.Marshal(cr.Spec.Properties)
 	if err != nil {
 		return nil, errors.Wrap(err, errJSONMarshal)
 	}

@@ -6,8 +6,8 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/openconfig/gnmi v0.0.0-20210914185457-51254b657b7d
 	github.com/openconfig/goyang v1.0.0
-	github.com/openconfig/ygot v0.16.0
-	github.com/yndd/ndd-runtime v0.3.3
+	github.com/openconfig/ygot v0.16.1
+	github.com/yndd/ndd-runtime v0.3.6
 	google.golang.org/grpc v1.43.0
 	google.golang.org/protobuf v1.27.1 // indirect
 	k8s.io/apimachinery v0.22.2
@@ -15,7 +15,6 @@ require (
 )
 
 require (
-	github.com/AlekSi/pointer v1.2.0
 	github.com/google/gnxi v0.0.0-20200508145201-92c6d0d3ec3b
 	github.com/google/go-cmp v0.5.7
 	github.com/karimra/gnmic v0.22.1
@@ -36,6 +35,7 @@ require (
 require (
 	cloud.google.com/go v0.95.0 // indirect
 	cloud.google.com/go/storage v1.16.1 // indirect
+	github.com/AlekSi/pointer v1.2.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Microsoft/go-winio v0.5.0 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20210920160938-87db9fbc61c7 // indirect

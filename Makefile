@@ -12,7 +12,7 @@ IMAGE_TAG_BASE ?= yndd/nddp-srl3
 
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE)-controller:$(VERSION)
-
+IMG_WEBHOOK ?= $(IMAGE_TAG_BASE)-webhook-controller:$(VERSION)
 # Package
 PKG ?= $(IMAGE_TAG_BASE)
 
@@ -73,16 +73,19 @@ test: generate fmt vet ## Run tests.
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.
-    @CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./bin/manager cmd/main.go
+    @CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./bin/manager cmd/providercmd/main.go
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./bin/webhook cmd/webhookcmd/main.go
 
 run: generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/providercmd/main.go
 
 docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build -f DockerfileProvider -t ${IMG} .
+	##docker build -f DockerfileWebhook -t ${IMG_WEBHOOK} .
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
+	##docker push ${IMG_WEBHOOK}
 
 package-build: ## build ndd package.
 	rm -rf package/nddp*

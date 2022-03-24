@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nddp-srl3-8882f12f5a3e-webhook-serving-cert
+  namespace: kubebuilder-webhook-system
+spec:
+  dnsNames:
+  - nddp-srl3-8882f12f5a3e-webhook-svc.ndd-system.svc
+  - nddp-srl3-8882f12f5a3e-webhook-svc.ndd-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: nddp-srl3-8882f12f5a3e-webhook-serving-cert

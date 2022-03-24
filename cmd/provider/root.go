@@ -27,7 +27,7 @@ import (
 
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 
-	srl3v1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
+	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 	//apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	//+kubebuilder:scaffold:imports
 )
@@ -60,7 +60,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&profiler, "profiler", "", false, "enable profiling")
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(srl3v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(srlv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ndrv1.AddToScheme(scheme))
 	//utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme

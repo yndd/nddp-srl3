@@ -51,7 +51,7 @@ type IFSrl3Device interface {
 	SetConditions(c ...nddv1.Condition)
 	// getters based on labels
 	GetOwner() string
-	GetDeploymentPolicy() string
+	//GetDeploymentPolicy() string
 	GetDeviceName() string
 	GetEndpointGroup() string
 	GetOrganization() string
@@ -69,6 +69,7 @@ func (x *Srl3Device) GetOwner() string {
 	}
 }
 
+/*
 func (x *Srl3Device) GetDeploymentPolicy() string {
 	if s, ok := x.GetLabels()[LabelNddaDeploymentPolicy]; !ok {
 		return ""
@@ -76,6 +77,7 @@ func (x *Srl3Device) GetDeploymentPolicy() string {
 		return s
 	}
 }
+*/
 
 func (x *Srl3Device) GetDeviceName() string {
 	if s, ok := x.GetLabels()[LabelNddaDevice]; !ok {

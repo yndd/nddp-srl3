@@ -1,0 +1,27 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: ndd-system/nddp-srl3-8882f12f5a3e-webhook-serving-cert
+  name: nddp-srl3-8882f12f5a3e-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: nddp-srl3-8882f12f5a3e-webhook-svc
+      namespace: ndd-system
+      path: /validate-srl3device
+  failurePolicy: Fail
+  name: vsrl3device.srl3.nddp.yndd.io
+  rules:
+  - apiGroups:
+    - srl3.nddp.yndd.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - "*"
+  sideEffects: None
