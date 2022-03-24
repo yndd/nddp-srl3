@@ -56,7 +56,6 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	rm -rf package/crds/
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) webhook paths="./..." output:crd:artifacts:config=package/crds
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
-	cd apis;$(NDD_GEN) generate-methodsets --header-file=../"hack/boilerplate.go.txt" --paths="./..."; cd ..
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
