@@ -130,7 +130,7 @@ type deviceDriver struct {
 	client   resource.ClientApplicator
 	eventChs map[string]chan event.GenericEvent
 	// server
-	server gnmiserver.Server
+	server gnmiserver.GnmiServer
 
 	ctx    context.Context
 	stopCh chan bool

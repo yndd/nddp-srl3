@@ -13,7 +13,6 @@ import (
 	"github.com/openconfig/ygot/ygot"
 	"github.com/openconfig/ygot/ytypes"
 	"github.com/pkg/errors"
-	yangcache "github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
@@ -35,7 +34,7 @@ type Cache interface {
 	HasTarget(target string) bool
 	GetValidatedGoStruct(target string) ygot.ValidatedGoStruct
 	UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct, print bool)
-	GetCache() *yangcache.Cache
+	// GetCache() *yangcache.Cache
 	SetModel(target string, m *model.Model)
 	GetModel(target string) *model.Model
 
@@ -67,14 +66,12 @@ type cache struct {
 	//validatedMutex sync.RWMutex
 	validated map[string]ygot.ValidatedGoStruct
 	model     map[string]*model.Model
-	c         *yangcache.Cache
 }
 
 func New() Cache {
 	return &cache{
 		validated: make(map[string]ygot.ValidatedGoStruct),
 		model:     make(map[string]*model.Model),
-		c:         yangcache.New([]string{}),
 	}
 }
 
@@ -130,10 +127,6 @@ func (c *cache) UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct,
 		fmt.Printf("UpdateValidatedGoStruct, deviceName: %s, goStruct: %v\n", target, s)
 	}
 
-}
-
-func (c *cache) GetCache() *yangcache.Cache {
-	return c.c
 }
 
 func (c *cache) SetModel(target string, m *model.Model) {

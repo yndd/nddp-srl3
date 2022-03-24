@@ -40,7 +40,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func (s *server) Get(ctx context.Context, req *gnmi.GetRequest) (*gnmi.GetResponse, error) {
+func (s *GnmiServerImpl) Get(ctx context.Context, req *gnmi.GetRequest) (*gnmi.GetResponse, error) {
 	ok := s.unaryRPCsem.TryAcquire(1)
 	if !ok {
 		return nil, status.Errorf(codes.ResourceExhausted, "max number of Unary RPC reached")
@@ -66,7 +66,7 @@ func (s *server) Get(ctx context.Context, req *gnmi.GetRequest) (*gnmi.GetRespon
 	}, err
 }
 
-func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
+func (s *GnmiServerImpl) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 	prefix := req.GetPrefix()
 	//origin := req.GetPrefix().GetOrigin()
 
@@ -77,7 +77,7 @@ func (s *server) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, error) {
 		target = strings.ReplaceAll(target, "ygot.", "")
 	}
 
-	if !s.cache.GetCache().GetCache().HasTarget(target) {
+	if !s.cache.HasTarget(target) {
 		return nil, status.Errorf(codes.Unavailable, "cache not ready")
 	}
 
