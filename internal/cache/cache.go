@@ -20,6 +20,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// yangcache "github.com/yndd/ndd-yang/pkg/cache"
+
 type Origin string
 
 const (
@@ -34,9 +36,11 @@ type Cache interface {
 	HasTarget(target string) bool
 	GetValidatedGoStruct(target string) ygot.ValidatedGoStruct
 	UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct, print bool)
-	// GetCache() *yangcache.Cache
+	//GetCache() *yangcache.Cache
 	SetModel(target string, m *model.Model)
 	GetModel(target string) *model.Model
+
+	DeleteTarget(target string) error
 
 	// data manipulation methods
 	ValidateCreate(target string, x interface{}) (ygot.ValidatedGoStruct, error)
@@ -141,6 +145,21 @@ func (c *cache) GetModel(target string) *model.Model {
 	if m, ok := c.model[target]; ok {
 		return m
 	}
+	return nil
+}
+
+// DeleteTarget removes the cache entry for the given target
+// as well as the reference in the models map
+// returns always nil since there is no issue we need to flag until now
+func (c *cache) DeleteTarget(target string) error {
+
+	defer c.m.Unlock()
+	c.m.Lock()
+
+	// if the keys do not exist nothing happens, so we can call the delete without any checks
+	delete(c.validated, target)
+	delete(c.model, target)
+
 	return nil
 }
 
