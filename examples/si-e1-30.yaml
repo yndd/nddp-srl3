@@ -4,17 +4,18 @@ metadata:
   name: subint-e1-49-0
   namespace: default
 spec:
-  active: true
+  deploymentPolicy: Active
+  deletionPolicy: Delete
   networkNodeRef:
     name: leaf1
-  device:
+  properties:
     interface:
-    - name: "ethernet-1/49"
+    - name: "ethernet-1/30"
       subinterface:
       - index: 1
         type: routed
         admin-state: enable
-        description: "ndd-e1-49-0-leaf1"
+        description: "ndd-e1-30-0-leaf1"
         ipv4:
           address:
           - ip-prefix: 100.64.0.0/31
