@@ -39,28 +39,28 @@ const (
 )
 
 // Option can be used to manipulate Options.
-type Option func(Server)
+type Option func(GnmiServer)
 
 // WithLogger specifies how the Reconciler should log messages.
 func WithLogger(log logging.Logger) Option {
-	return func(s Server) {
+	return func(s GnmiServer) {
 		s.WithLogger(log)
 	}
 }
 
 func WithCache(c cache.Cache) Option {
-	return func(s Server) {
+	return func(s GnmiServer) {
 		s.WithCache(c)
 	}
 }
 
 func WithEventChannels(e map[string]chan event.GenericEvent) Option {
-	return func(s Server) {
+	return func(s GnmiServer) {
 		s.WithEventChannels(e)
 	}
 }
 
-type Server interface {
+type GnmiServer interface {
 	WithLogger(log logging.Logger)
 	WithCache(c cache.Cache)
 	WithEventChannels(e map[string]chan event.GenericEvent)
@@ -84,7 +84,7 @@ type config struct {
 	//debug         bool
 }
 
-type server struct {
+type GnmiServerImpl struct {
 	gnmi.UnimplementedGNMIServer
 
 	cfg *config
@@ -106,8 +106,8 @@ type server struct {
 	ctx context.Context
 }
 
-func New(opts ...Option) Server {
-	s := &server{
+func New(opts ...Option) GnmiServer {
+	s := &GnmiServerImpl{
 		m: match.New(),
 		cfg: &config{
 			address:    ":" + strconv.Itoa(pkgmetav1.GnmiServerPort),
@@ -125,19 +125,19 @@ func New(opts ...Option) Server {
 	return s
 }
 
-func (s *server) WithLogger(log logging.Logger) {
+func (s *GnmiServerImpl) WithLogger(log logging.Logger) {
 	s.log = log
 }
 
-func (s *server) WithEventChannels(e map[string]chan event.GenericEvent) {
+func (s *GnmiServerImpl) WithEventChannels(e map[string]chan event.GenericEvent) {
 	s.EventChannels = e
 }
 
-func (s *server) WithCache(c cache.Cache) {
+func (s *GnmiServerImpl) WithCache(c cache.Cache) {
 	s.cache = c
 }
 
-func (s *server) Start() error {
+func (s *GnmiServerImpl) Start() error {
 	log := s.log.WithValues("grpcServerAddress", s.cfg.address)
 	log.Debug("grpc server run...")
 	errChannel := make(chan error)
@@ -151,7 +151,7 @@ func (s *server) Start() error {
 }
 
 // run GRPC Server
-func (s *server) run() error {
+func (s *GnmiServerImpl) run() error {
 	s.subscribeRPCsem = semaphore.NewWeighted(defaultMaxSubscriptions)
 	s.unaryRPCsem = semaphore.NewWeighted(defaultMaxGetRPC)
 	log := s.log.WithValues("grpcServerAddress", s.cfg.address)

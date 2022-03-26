@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func (s *server) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.SetResponse, error) {
+func (s *GnmiServerImpl) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.SetResponse, error) {
 
 	ok := s.unaryRPCsem.TryAcquire(1)
 	if !ok {

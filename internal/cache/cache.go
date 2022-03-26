@@ -13,13 +13,14 @@ import (
 	"github.com/openconfig/ygot/ygot"
 	"github.com/openconfig/ygot/ytypes"
 	"github.com/pkg/errors"
-	yangcache "github.com/yndd/ndd-yang/pkg/cache"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// yangcache "github.com/yndd/ndd-yang/pkg/cache"
 
 type Origin string
 
@@ -35,9 +36,11 @@ type Cache interface {
 	HasTarget(target string) bool
 	GetValidatedGoStruct(target string) ygot.ValidatedGoStruct
 	UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct, print bool)
-	GetCache() *yangcache.Cache
+	//GetCache() *yangcache.Cache
 	SetModel(target string, m *model.Model)
 	GetModel(target string) *model.Model
+
+	DeleteTarget(target string) error
 
 	// data manipulation methods
 	ValidateCreate(target string, x interface{}) (ygot.ValidatedGoStruct, error)
@@ -67,14 +70,12 @@ type cache struct {
 	//validatedMutex sync.RWMutex
 	validated map[string]ygot.ValidatedGoStruct
 	model     map[string]*model.Model
-	c         *yangcache.Cache
 }
 
 func New() Cache {
 	return &cache{
 		validated: make(map[string]ygot.ValidatedGoStruct),
 		model:     make(map[string]*model.Model),
-		c:         yangcache.New([]string{}),
 	}
 }
 
@@ -132,10 +133,6 @@ func (c *cache) UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct,
 
 }
 
-func (c *cache) GetCache() *yangcache.Cache {
-	return c.c
-}
-
 func (c *cache) SetModel(target string, m *model.Model) {
 	defer c.m.Unlock()
 	c.m.Lock()
@@ -148,6 +145,21 @@ func (c *cache) GetModel(target string) *model.Model {
 	if m, ok := c.model[target]; ok {
 		return m
 	}
+	return nil
+}
+
+// DeleteTarget removes the cache entry for the given target
+// as well as the reference in the models map
+// returns always nil since there is no issue we need to flag until now
+func (c *cache) DeleteTarget(target string) error {
+
+	defer c.m.Unlock()
+	c.m.Lock()
+
+	// if the keys do not exist nothing happens, so we can call the delete without any checks
+	delete(c.validated, target)
+	delete(c.model, target)
+
 	return nil
 }
 

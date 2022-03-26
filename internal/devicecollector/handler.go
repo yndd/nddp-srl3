@@ -44,11 +44,6 @@ func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 			return errors.New("target cache does not exist")
 		}
 
-		if !c.cache.GetCache().GetCache().HasTarget(crDeviceName) {
-			log.Debug("handle target update target not found in cache")
-			return errors.New("target cache does not exist")
-		}
-
 		resourceList, err := c.cache.GetSystemResourceList(shared.GetCrSystemDeviceName(crDeviceName))
 		if err != nil {
 			return err

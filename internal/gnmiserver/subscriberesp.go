@@ -34,7 +34,7 @@ type streamClient struct {
 	errChan chan<- error
 }
 
-func (s *server) handleSubscriptionRequest(sc *streamClient) {
+func (s *GnmiServerImpl) handleSubscriptionRequest(sc *streamClient) {
 	var err error
 	s.log.Debug("processing subscription", "Target", sc.target)
 	defer func() {
@@ -78,7 +78,7 @@ func (s *server) handleSubscriptionRequest(sc *streamClient) {
 
 }
 
-func (s *server) sendStreamingResults(sc *streamClient) {
+func (s *GnmiServerImpl) sendStreamingResults(sc *streamClient) {
 	ctx := sc.stream.Context()
 	peer, _ := peer.FromContext(ctx)
 	s.log.Debug("sending streaming results", "Target", sc.target, "Peer", peer.Addr)
@@ -129,7 +129,7 @@ type resp struct {
 	dup    uint32
 }
 
-func (s *server) sendSubscribeResponse(r *resp, sc *streamClient) error {
+func (s *GnmiServerImpl) sendSubscribeResponse(r *resp, sc *streamClient) error {
 	notif, err := subscribe.MakeSubscribeResponse(r.n.Value(), r.dup)
 	if err != nil {
 		return status.Errorf(codes.Unknown, "unknown error: %v", err)
