@@ -37,7 +37,11 @@ func GetCrDeviceName(namespace, name string) string {
 }
 
 func GetCrSystemDeviceName(name string) string {
-	return strings.Join([]string{SystemNamespace, name}, ".")
+	result := name
+	if !strings.HasPrefix(name, SystemNamespace) {
+		result = strings.Join([]string{SystemNamespace, name}, ".")
+	}
+	return result
 }
 
 func GetCrCandidateDeviceName(name string) string {

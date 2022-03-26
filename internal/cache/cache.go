@@ -97,19 +97,23 @@ func (c *cache) HasTarget(target string) bool {
 func (c *cache) GetValidatedGoStruct(target string) ygot.ValidatedGoStruct {
 	defer c.m.Unlock()
 	c.m.Lock()
-	if s, ok := c.validated[target]; ok {
-		if s == nil {
-			fmt.Println("GetValidatedGoStruct is nil")
-			return s
-		} else {
-			curGoStruct, err := ygot.DeepCopy(s)
-			if err != nil {
-				return nil
-			}
-			return curGoStruct.(ygot.ValidatedGoStruct)
-		}
+	var s ygot.ValidatedGoStruct
+	var ok bool
+
+	if s, ok = c.validated[target]; !ok {
+		return nil
 	}
-	return nil
+
+	if s == nil {
+		fmt.Println("GetValidatedGoStruct is nil")
+		return s
+	}
+
+	curGoStruct, err := ygot.DeepCopy(s)
+	if err != nil {
+		return nil
+	}
+	return curGoStruct.(ygot.ValidatedGoStruct)
 }
 
 func (c *cache) UpdateValidatedGoStruct(target string, s ygot.ValidatedGoStruct, print bool) {
