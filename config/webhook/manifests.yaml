@@ -14,7 +14,7 @@ webhooks:
       namespace: system
       path: /mutate-srl3-nddp-yndd-io-v1alpha1-srl3device
   failurePolicy: Fail
-  name: msrl3device.srl3.nddp.yndd.io
+  name: mutate.srl3.nddp.yndd.io
   rules:
   - apiGroups:
     - srl3.nddp.yndd.io
@@ -24,7 +24,7 @@ webhooks:
     - CREATE
     - UPDATE
     resources:
-    - srl3devices
+    - '*'
   sideEffects: None
 
 ---
@@ -42,7 +42,7 @@ webhooks:
       namespace: system
       path: /validate-srl3-nddp-yndd-io-v1alpha1-srl3device
   failurePolicy: Fail
-  name: vsrl3device.srl3.nddp.yndd.io
+  name: validate.srl3.nddp.yndd.io
   rules:
   - apiGroups:
     - srl3.nddp.yndd.io
@@ -52,5 +52,5 @@ webhooks:
     - CREATE
     - UPDATE
     resources:
-    - srl3devices
+    - '*'
   sideEffects: None

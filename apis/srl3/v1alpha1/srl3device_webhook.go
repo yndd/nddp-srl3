@@ -47,7 +47,7 @@ func (r *Srl3Device) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-srl3-nddp-yndd-io-v1alpha1-srl3device,mutating=true,failurePolicy=fail,sideEffects=None,groups=srl3.nddp.yndd.io,resources=srl3devices,verbs=create;update,versions=v1alpha1,name=msrl3device.srl3.nddp.yndd.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/mutate-srl3-nddp-yndd-io-v1alpha1-srl3device,mutating=true,failurePolicy=fail,sideEffects=None,groups=srl3.nddp.yndd.io,resources="*",verbs=create;update,versions=v1alpha1,name=mutate.srl3.nddp.yndd.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &Srl3Device{}
 
@@ -84,7 +84,7 @@ func (r *Srl3Device) Default() {
 
 }
 
-//+kubebuilder:webhook:path=/validate-srl3-nddp-yndd-io-v1alpha1-srl3device,mutating=false,failurePolicy=fail,sideEffects=None,groups=srl3.nddp.yndd.io,resources=srl3devices,verbs=create;update,versions=v1alpha1,name=vsrl3device.srl3.nddp.yndd.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-srl3-nddp-yndd-io-v1alpha1-srl3device,mutating=false,failurePolicy=fail,sideEffects=None,groups=srl3.nddp.yndd.io,resources="*",verbs=create;update,versions=v1alpha1,name=validate.srl3.nddp.yndd.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &Srl3Device{}
 
