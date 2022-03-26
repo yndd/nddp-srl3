@@ -387,13 +387,14 @@ func (d *deviceDriver) printDeviceCapabilities(gnmiCap []*gnmi.ModelData) {
 
 func (d *deviceDriver) deleteDevice(du shared.DeviceUpdate) error {
 	crDeviceName := shared.GetCrDeviceName(du.Namespace, du.TargetConfig.Name)
-	//crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 	// stop the collector
 	if ddd, ok := d.devices[crDeviceName]; ok {
 		ddd.collector.Stop()
 	}
 	// clear the cache from the device
 	d.cache.DeleteTarget(crDeviceName)
+	d.cache.DeleteTarget(crSystemDeviceName)
 
 	return nil
 }
