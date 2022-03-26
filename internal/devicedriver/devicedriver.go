@@ -305,7 +305,7 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	}
 
 	// discover the device
-	cap, err := ddd.device.Capabilities(d.ctx)
+	cap, err := ddd.device.SupportedModels(d.ctx)
 	if err != nil {
 		return err
 	}

@@ -159,7 +159,7 @@ func (r *reconciler) reconcileCreate(ctx context.Context, resource *ygotnddp.Ndd
 			Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonIetfVal{JsonIetfVal: []byte(j)}},
 		},
 	}
-	if _, err := r.device.UpdateGnmi(ctx, updates); err != nil {
+	if _, err := r.device.GNMISet(ctx, updates, nil); err != nil {
 		// update failed
 		if e, ok := status.FromError(err); ok {
 			switch e.Code() {
@@ -221,7 +221,7 @@ func (r *reconciler) reconcileUpdate(ctx context.Context, resource *ygotnddp.Ndd
 	}
 
 	// execute the deletes and updates in the cache and to the device
-	_, err := r.device.SetGnmi(r.ctx, updates, deletes)
+	_, err := r.device.GNMISet(r.ctx, updates, deletes)
 	if err != nil {
 		if e, ok := status.FromError(err); ok {
 			switch e.Code() {
@@ -268,7 +268,7 @@ func (r *reconciler) reconcileDelete(ctx context.Context, resource *ygotnddp.Ndd
 			return err
 		}
 		// apply deletes on the device
-		_, err := r.device.DeleteGnmi(ctx, delPaths)
+		_, err := r.device.GNMISet(ctx, nil, delPaths)
 		if err != nil {
 			if e, ok := status.FromError(err); ok {
 				switch e.Code() {
