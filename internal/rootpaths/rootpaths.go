@@ -35,6 +35,7 @@ func getSortedKeyMapAsString(keys_map map[string]string) string {
 	result := ""
 
 	if len(keys_map) > 0 {
+		result += "["
 		// maps are note sorted in golang, so we extrat the keys a alice of the keys that we can sort
 		keys := make([]string, 0, len(keys_map))
 
@@ -59,10 +60,10 @@ func getSortedKeyMapAsString(keys_map map[string]string) string {
 func ConfigElementHierarchyFromGnmiUpdate(yang_schema *yang.Entry, gn *gnmi.Notification) *configElement {
 	rootConfigElement := CreateRootConfigElement(yang_schema)
 	for _, path := range gn.GetDelete() {
-		rootConfigElement.Add(getPathAndSchemaEntry(yang_schema, path))
+		rootConfigElement.Add(getPathAndSchemaEntry(yang_schema, path), nil)
 	}
 	for _, update := range gn.GetUpdate() {
-		rootConfigElement.Add(getPathAndSchemaEntry(yang_schema, update.Path))
+		rootConfigElement.Add(getPathAndSchemaEntry(yang_schema, update.Path), update.Val)
 	}
 	return rootConfigElement
 }
