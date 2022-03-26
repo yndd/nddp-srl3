@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/karimra/gnmic/target"
 	"github.com/openconfig/gnmi/proto/gnmi"
@@ -130,7 +129,7 @@ type deviceDriver struct {
 	client   resource.ClientApplicator
 	eventChs map[string]chan event.GenericEvent
 	// server
-	server gnmiserver.Server
+	server gnmiserver.GnmiServer
 
 	ctx    context.Context
 	stopCh chan bool
@@ -327,15 +326,6 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	// initialize the system model
 	d.cache.SetModel(crSystemDeviceName, getSystemModel())
 
-	// initialize cache with device target
-	if !d.cache.GetCache().GetCache().HasTarget(crDeviceName) {
-		d.cache.GetCache().GetCache().Add(crDeviceName)
-	}
-	// initialize cache with system target
-	if !d.cache.GetCache().GetCache().HasTarget(crSystemDeviceName) {
-		d.cache.GetCache().GetCache().Add(crSystemDeviceName)
-	}
-
 	// get initial config through gnmi
 	ddd.initialConfig, err = ddd.device.GetConfig(d.ctx)
 	if err != nil {
@@ -402,11 +392,9 @@ func (d *deviceDriver) deleteDevice(du shared.DeviceUpdate) error {
 	if ddd, ok := d.devices[crDeviceName]; ok {
 		ddd.collector.Stop()
 	}
-
-	// delete the device target from the cache
-	d.cache.GetCache().GetCache().Remove(crDeviceName)
-	// delete the system target from the cache
-	d.cache.GetCache().GetCache().Remove(crSystemDeviceName)
+	// clear the cache from the device
+	d.cache.DeleteTarget(crDeviceName)
+	d.cache.DeleteTarget(crSystemDeviceName)
 
 	return nil
 }
@@ -451,7 +439,7 @@ type Callback func(ygot.ValidatedGoStruct) error
 func (ddd *deviceInfo) validateDeviceConfig() error {
 	// TBD RELATIVE LEAFREF IS AN ISSUE In YGOT
 
-	config, err := json.MarshalIndent(ddd.initialConfig, "", "\t")
+	config, err := json.Marshal(ddd.initialConfig)
 	if err != nil {
 		return err
 	}
@@ -475,51 +463,11 @@ func (ddd *deviceInfo) validateDeviceConfig() error {
 }
 
 func (ddd *deviceInfo) ygotDeviceCallback(c ygot.ValidatedGoStruct) error { // Apply the config to your device and return nil if success. return error if fails.		/
-	// Do something ...
-	//fmt.Println("ygot callback")
-	/*
-		j, err := ygot.EmitJSON(newConfig, &ygot.EmitJSONConfig{
-			Format: ygot.Internal,
-			Indent: "  ",
-			RFC7951Config: &ygot.RFC7951JSONConfig{
-				AppendModuleName: true,
-			},
-		})
-		if err != nil {
-			return err
-		}
-	*/
-	//fmt.Println(j)
-
-	//var x interface{}
-	//json.Unmarshal([]byte(j), &x)
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 	ddd.log.Debug("ygotDeviceCallback updateValidatedGoStruct", "crDeviceName", crDeviceName)
 
 	ddd.cache.UpdateValidatedGoStruct(crDeviceName, c, false)
-
-	// we dont validate the cache
-	ns, err := ygot.TogNMINotifications(ddd.cache.GetValidatedGoStruct(crDeviceName), time.Now().UnixNano(), ygot.GNMINotificationsConfig{
-		UsePathElem: true,
-	})
-	if err != nil {
-		return err
-	}
-
-	for _, n := range ns {
-		/*
-			for _, u := range n.GetUpdate() {
-				ddd.log.Debug("Update", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal())
-			}
-		*/
-
-		if err := ddd.cache.GetCache().GnmiUpdate(crDeviceName, n); err != nil {
-			//log.Debug("handle target update", "error", err, "Path", yparser.GnmiPath2XPath(u.GetPath(), true), "Value", u.GetVal())
-			//log.Debug("handle target update", "error", err, "Notification", *n)
-			return errors.New("cache update failed")
-		}
-	}
 
 	return nil
 }

@@ -157,7 +157,7 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 		log.Debug("ValidateRootPaths resourceList", "resourceName", resourceName)
 	}
 
-	b, err := json.Marshal(cr.Spec.Device)
+	b, err := json.Marshal(cr.Spec.Properties)
 	if err != nil {
 		return managed.ValidateRootPathsObservation{}, err
 	}
@@ -346,7 +346,7 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 				}
 				// we build a gnmi response to be able to reuse the observe code
 				resp = getGnmiResp(errMsg.Spec)
-				failedObserve, err := e.processObserve(*cr.Spec.Device, resp)
+				failedObserve, err := e.processObserve(cr.Spec.Properties, resp)
 				if err != nil {
 					return managed.ExternalObservation{}, err
 				}
@@ -389,7 +389,7 @@ func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (mana
 		}
 	}
 
-	observe, err := e.processObserve(*cr.Spec.Device, resp)
+	observe, err := e.processObserve(cr.Spec.Properties, resp)
 	if err != nil {
 		log.Debug("Observe Response", "error", err)
 		if strings.Contains(err.Error(), "not found") {

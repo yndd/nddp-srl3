@@ -6,8 +6,8 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/openconfig/gnmi v0.0.0-20220131173555-39aa74195f0d
 	github.com/openconfig/goyang v1.0.0
-	github.com/openconfig/ygot v0.16.0
-	github.com/yndd/ndd-runtime v0.3.3
+	github.com/openconfig/ygot v0.16.1
+	github.com/yndd/ndd-runtime v0.3.6
 	google.golang.org/grpc v1.44.0
 	google.golang.org/protobuf v1.27.1 // indirect
 	k8s.io/apimachinery v0.22.5
@@ -71,6 +71,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect

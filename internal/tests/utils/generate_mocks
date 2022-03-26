@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# to be executed in project root folder
+
+mockgen -destination=internal/tests/mocks/cache.go -package=mocks github.com/yndd/nddp-srl3/internal/cache Cache

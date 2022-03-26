@@ -1,15 +1,16 @@
 apiVersion: srl3.nddp.yndd.io/v1alpha1
 kind: Srl3Device
 metadata:
-  name: int-e1-49
+  name: int-e1-30
   namespace: default
 spec:
-  active: true
+  deploymentPolicy: Active
+  deletionPolicy: Delete
   networkNodeRef:
     name: leaf1
-  device:
+  properties:
     interface:
-    - name: "ethernet-1/49"
+    - name: "ethernet-1/30"
       admin-state: "enable"
-      description: "ndd-ethernet-1/49"
+      description: "ndd-ethernet-1/30"
       vlan-tagging: true

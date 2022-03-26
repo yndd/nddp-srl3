@@ -32,7 +32,7 @@ import (
 
 type syncMarker struct{}
 
-func (s *server) Subscribe(stream gnmi.GNMI_SubscribeServer) error {
+func (s *GnmiServerImpl) Subscribe(stream gnmi.GNMI_SubscribeServer) error {
 	sc := &streamClient{
 		stream: stream,
 	}
