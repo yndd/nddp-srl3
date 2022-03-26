@@ -451,7 +451,7 @@ type Callback func(ygot.ValidatedGoStruct) error
 func (ddd *deviceInfo) validateDeviceConfig() error {
 	// TBD RELATIVE LEAFREF IS AN ISSUE In YGOT
 
-	config, err := json.MarshalIndent(ddd.initialConfig, "", "\t")
+	config, err := json.Marshal(ddd.initialConfig)
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,7 @@ IMAGE_TAG_BASE ?= yndd/nddp-srl3
 
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE)-controller:$(VERSION)
-
+IMG_WEBHOOK ?= $(IMAGE_TAG_BASE)-webhook-controller:$(VERSION)
 # Package
 PKG ?= $(IMAGE_TAG_BASE)
 
@@ -56,7 +56,6 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	rm -rf package/crds/
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) webhook paths="./..." output:crd:artifacts:config=package/crds
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
-	cd apis;$(NDD_GEN) generate-methodsets --header-file=../"hack/boilerplate.go.txt" --paths="./..."; cd ..
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -73,16 +72,19 @@ test: generate fmt vet ## Run tests.
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.
-    @CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./bin/manager cmd/main.go
+    @CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./bin/manager cmd/providercmd/main.go
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./bin/webhook cmd/webhookcmd/main.go
 
 run: generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/providercmd/main.go
 
 docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build -f DockerfileProvider -t ${IMG} .
+	##docker build -f DockerfileWebhook -t ${IMG_WEBHOOK} .
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
+	##docker push ${IMG_WEBHOOK}
 
 package-build: ## build ndd package.
 	rm -rf package/nddp*
@@ -95,3 +97,17 @@ package-push: ## build ndd package.
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
 	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1)
+
+# go-get-tool will 'go get' any package $2 and install it to $1.
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+define go-get-tool
+@[ -f $(1) ] || { \
+set -e ;\
+TMP_DIR=$$(mktemp -d) ;\
+cd $$TMP_DIR ;\
+go mod init tmp ;\
+echo "Downloading $(2)" ;\
+GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+rm -rf $$TMP_DIR ;\
+}
+endef

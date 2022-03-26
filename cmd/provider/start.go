@@ -34,13 +34,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/ratelimiter"
 	"github.com/yndd/ndd-runtime/pkg/resource"
-
-	//nddpschema "github.com/yndd/nddp-system/pkg/yangschema"
-
+	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 	"github.com/yndd/nddp-srl3/internal/controllers"
 	"github.com/yndd/nddp-srl3/internal/devicedriver"
 	"github.com/yndd/nddp-srl3/internal/shared"
@@ -84,13 +83,15 @@ var startCmd = &cobra.Command{
 
 		zlog.Info("create manager")
 		mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-			Scheme:                 scheme,
-			MetricsBindAddress:     metricsAddr,
-			Port:                   9443,
+			Scheme:             scheme,
+			MetricsBindAddress: metricsAddr,
+			WebhookServer: &webhook.Server{
+				Port: 9443,
+			},
+			Port:                   7443,
 			HealthProbeBindAddress: probeAddr,
-			//LeaderElection:         false,
-			LeaderElection:   enableLeaderElection,
-			LeaderElectionID: "c66ce353.ndd.yndd.io",
+			LeaderElection:         enableLeaderElection,
+			LeaderElectionID:       "c66ce353.ndd.yndd.io",
 		})
 		if err != nil {
 			return errors.Wrap(err, "Cannot create manager")
@@ -119,6 +120,10 @@ var startCmd = &cobra.Command{
 		eventChs, err := controllers.Setup(mgr, nddCtlrOptions(concurrency), nddcopts)
 		if err != nil {
 			return errors.Wrap(err, "Cannot add ndd controllers to manager")
+		}
+
+		if err = (&srlv1alpha1.Srl3Device{}).SetupWebhookWithManager(mgr); err != nil {
+			return errors.Wrap(err, "unable to create webhook for srl3device")
 		}
 
 		// intialize the devicedriver

@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -139,10 +139,12 @@ func (x *srlintent) buildCR(mg resource.Managed, deviceName string, labels map[s
 		return nil, err
 	}
 
-	var d srlv1alpha1.Device
-	if err := json.Unmarshal([]byte(j), &d); err != nil {
-		return nil, err
-	}
+	/*
+		var d srlv1alpha1.Properties
+		if err := json.Unmarshal([]byte(j), &d); err != nil {
+			return nil, err
+		}
+	*/
 
 	return &srlv1alpha1.Srl3Device{
 		ObjectMeta: metav1.ObjectMeta{
@@ -157,7 +159,9 @@ func (x *srlintent) buildCR(mg resource.Managed, deviceName string, labels map[s
 					Name: deviceName,
 				},
 			},
-			Device: &d,
+			Properties: runtime.RawExtension{
+				Raw: []byte(j),
+			},
 		},
 	}, nil
 }

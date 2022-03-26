@@ -23,8 +23,8 @@ package v1alpha1
 import nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
 
 // GetActive of this Srl3Device.
-func (mg *Srl3Device) GetActive() bool {
-	return mg.Spec.Active
+func (mg *Srl3Device) GetDeploymentPolicy() nddv1.DeploymentPolicy {
+	return mg.Spec.DeploymentPolicy
 }
 
 // GetCondition of this Srl3Device.
@@ -53,8 +53,8 @@ func (mg *Srl3Device) GetHierPaths() map[string][]string {
 }
 
 // SetActive of this Srl3Device.
-func (mg *Srl3Device) SetActive(b bool) {
-	mg.Spec.Active = b
+func (mg *Srl3Device) SetDeploymentPolicy(b nddv1.DeploymentPolicy) {
+	mg.Spec.DeploymentPolicy = b
 }
 
 // SetConditions of this Srl3Device.

@@ -2,9 +2,9 @@ package ndda
 
 import (
 	"fmt"
-	"strings"
+	//"strings"
 
-	networkv1alpha1 "github.com/yndd/ndda-network/apis/network/v1alpha1"
+	//networkv1alpha1 "github.com/yndd/ndda-network/apis/network/v1alpha1"
 	"github.com/yndd/ndda-network/pkg/ndda/itfceinfo"
 	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/nddo-runtime/pkg/odns"
@@ -104,65 +104,73 @@ func getDeviceName(d srlv1alpha1.Srl3Device) string {
 
 func (x *selectedNodeItfces) GetNodeItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo, nddaDeviceList srlv1alpha1.IFSrl3DeviceList) {
 	for _, d := range nddaDeviceList.GetDevices() {
-		if d.GetSpec().Device.Interface != nil {
-			for _, i := range d.GetSpec().Device.Interface {
-				fmt.Printf("getNodeItfcesByEpgSelector: itfceepg: %s, nodename: %s, itfcename: %s\n", d.GetEndpointGroup(), d.GetDeviceName(), *i.Name)
-				for _, epgSelector := range epgSelectors {
-					if epgSelector.EpgName != "" && epgSelector.EpgName == d.GetEndpointGroup() {
-						fmt.Printf("getNodeItfcesByEpgSelector: %s\n", d.GetName())
-						// avoid selecting lag members
-						if !(i.Ethernet != nil && i.Ethernet.Aggregateid != nil) {
-							x.addNodeItfce(d.GetDeviceName(), *i.Name, itfceinfo.NewItfceInfo(
-								itfceinfo.WithInnerVlanId(epgSelector.InnerVlanId),
-								itfceinfo.WithOuterVlanId(epgSelector.OuterVlanId),
-								itfceinfo.WithItfceKind(networkv1alpha1.E_InterfaceKind_INTERFACE),
-								itfceinfo.WithIpv4Prefixes(epgSelector.Ipv4Prefixes),
-								itfceinfo.WithIpv6Prefixes(epgSelector.Ipv6Prefixes),
-							))
+		//TO BE UPDATED
+		/*
+			if d.GetSpec().Device.Interface != nil {
+				for _, i := range d.GetSpec().Properties {
+					fmt.Printf("getNodeItfcesByEpgSelector: itfceepg: %s, nodename: %s, itfcename: %s\n", d.GetEndpointGroup(), d.GetDeviceName(), *i.Name)
+					for _, epgSelector := range epgSelectors {
+						if epgSelector.EpgName != "" && epgSelector.EpgName == d.GetEndpointGroup() {
+							fmt.Printf("getNodeItfcesByEpgSelector: %s\n", d.GetName())
+							// avoid selecting lag members
+							if !(i.Ethernet != nil && i.Ethernet.Aggregateid != nil) {
+								x.addNodeItfce(d.GetDeviceName(), *i.Name, itfceinfo.NewItfceInfo(
+									itfceinfo.WithInnerVlanId(epgSelector.InnerVlanId),
+									itfceinfo.WithOuterVlanId(epgSelector.OuterVlanId),
+									itfceinfo.WithItfceKind(networkv1alpha1.E_InterfaceKind_INTERFACE),
+									itfceinfo.WithIpv4Prefixes(epgSelector.Ipv4Prefixes),
+									itfceinfo.WithIpv6Prefixes(epgSelector.Ipv6Prefixes),
+								))
+							}
 						}
 					}
 				}
 			}
-		}
+		*/
+		fmt.Printf("d:%v\n", d)
 	}
 }
 
 func (x *selectedNodeItfces) GetNodeItfcesByNodeItfceSelector(nodeItfceSelectors map[string]*nddov1.ItfceInfo, nddaDeviceList srlv1alpha1.IFSrl3DeviceList) {
 	for _, d := range nddaDeviceList.GetDevices() {
-		if d.GetSpec().Device.Interface != nil {
-			for _, i := range d.GetSpec().Device.Interface {
-				for deviceName, itfceInfo := range nodeItfceSelectors {
-					fmt.Printf("getNodeItfcesByNodeItfceSelector: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
+		//TO BE UPDATED
+		/*
+			if d.GetSpec().Device.Interface != nil {
+				for _, i := range d.GetSpec().Device.Interface {
+					for deviceName, itfceInfo := range nodeItfceSelectors {
+						fmt.Printf("getNodeItfcesByNodeItfceSelector: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
 
-					var itfceName string
-					if strings.Contains(itfceInfo.ItfceName, "lag") {
-						itfceName = strings.ReplaceAll(itfceInfo.ItfceName, "-", "")
-					}
-					if strings.Contains(itfceInfo.ItfceName, "int") {
-						itfceName = strings.ReplaceAll(itfceInfo.ItfceName, "int", "ethernet")
-						split := strings.Split(itfceName, "/")
-						if len(split) > 2 {
-							itfceName = "ethernet-" + split[len(split)-2] + "/" + split[len(split)-1]
+						var itfceName string
+						if strings.Contains(itfceInfo.ItfceName, "lag") {
+							itfceName = strings.ReplaceAll(itfceInfo.ItfceName, "-", "")
 						}
-					}
+						if strings.Contains(itfceInfo.ItfceName, "int") {
+							itfceName = strings.ReplaceAll(itfceInfo.ItfceName, "int", "ethernet")
+							split := strings.Split(itfceName, "/")
+							if len(split) > 2 {
+								itfceName = "ethernet-" + split[len(split)-2] + "/" + split[len(split)-1]
+							}
+						}
 
-					// avoid selecting lag members
-					if !(i.Ethernet != nil && i.Ethernet.Aggregateid != nil) {
-						if deviceName == d.GetDeviceName() &&
-							itfceName == *i.Name {
-							fmt.Printf("getNodeItfcesByNodeItfceSelector selected: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
-							x.addNodeItfce(d.GetDeviceName(), *i.Name, itfceinfo.NewItfceInfo(
-								itfceinfo.WithInnerVlanId(itfceInfo.InnerVlanId),
-								itfceinfo.WithOuterVlanId(itfceInfo.OuterVlanId),
-								itfceinfo.WithItfceKind(networkv1alpha1.E_InterfaceKind_INTERFACE),
-								itfceinfo.WithIpv4Prefixes(itfceInfo.Ipv4Prefixes),
-								itfceinfo.WithIpv6Prefixes(itfceInfo.Ipv6Prefixes),
-							))
+						// avoid selecting lag members
+						if !(i.Ethernet != nil && i.Ethernet.Aggregateid != nil) {
+							if deviceName == d.GetDeviceName() &&
+								itfceName == *i.Name {
+								fmt.Printf("getNodeItfcesByNodeItfceSelector selected: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
+								x.addNodeItfce(d.GetDeviceName(), *i.Name, itfceinfo.NewItfceInfo(
+									itfceinfo.WithInnerVlanId(itfceInfo.InnerVlanId),
+									itfceinfo.WithOuterVlanId(itfceInfo.OuterVlanId),
+									itfceinfo.WithItfceKind(networkv1alpha1.E_InterfaceKind_INTERFACE),
+									itfceinfo.WithIpv4Prefixes(itfceInfo.Ipv4Prefixes),
+									itfceinfo.WithIpv6Prefixes(itfceInfo.Ipv6Prefixes),
+								))
+							}
 						}
 					}
 				}
 			}
-		}
+		*/
+		fmt.Printf("d:%v\n", d)
 	}
 }
 
