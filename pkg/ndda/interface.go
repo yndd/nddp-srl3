@@ -28,6 +28,4 @@ type Handler interface {
 	WithLogger(log logging.Logger)
 	WithClient(client.Client)
 	GetSelectedNodeItfces(mg resource.Managed, epgSelectors []*nddov1.EpgInfo, nodeItfceSelectors map[string]*nddov1.ItfceInfo) (map[string][]itfceinfo.ItfceInfo, error)
-	//GetSelectedNodeItfcesIrb(mg resource.Managed, s srlschema.Schema, niName string) (map[string][]itfceinfo.ItfceInfo, error)
-	//GetSelectedNodeItfcesVxlan(mg resource.Managed, s srlschema.Schema, niName string) (map[string][]itfceinfo.ItfceInfo, error)
 }
