@@ -28,9 +28,16 @@ func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalOb
 		return nil, err
 	}
 
-	updates, err := getUpdates(obs.Updates)
-	if err != nil {
-		return nil, err
+	updates := map[string]*ygotnddp.NddpSystem_Gvk_Update{}
+	if obs.Updates != nil {
+		if updates, err = getUpdates(obs.Updates); err != nil {
+			return nil, err
+		}
+	}
+
+	deletes := []string{}
+	if obs.Deletes != nil {
+		deletes = getPaths(obs.Deletes)
 	}
 
 	// get nddpData from gvkname, action, paths and spec
@@ -41,7 +48,7 @@ func (e *externalDevice) getGvkUpate(mg resource.Managed, obs managed.ExternalOb
 		Status:  ygotnddp.NddpSystem_ResourceStatus_PENDING,
 		Reason:  ygot.String(""),
 		Spec:    spec,
-		Delete:  getPaths(obs.Deletes),
+		Delete:  deletes,
 		Update:  updates,
 		Attempt: ygot.Uint32(0),
 	}

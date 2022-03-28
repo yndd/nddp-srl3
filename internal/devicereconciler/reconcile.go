@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/gnxi/utils/xpath"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/yndd/ndd-yang/pkg/yparser"
@@ -151,7 +150,7 @@ func (r *reconciler) reconcileCreate(ctx context.Context, resource *ygotnddp.Ndd
 		return err
 	}
 
-	log.Debug("json update", "json", j)
+	//log.Debug("json update", "json", j)
 
 	updates := []*gnmi.Update{
 		{
@@ -188,7 +187,8 @@ func (r *reconciler) reconcileUpdate(ctx context.Context, resource *ygotnddp.Ndd
 	// delete and update come from the resource
 	deletes := []*gnmi.Path{}
 	for _, path := range resource.Delete {
-		p, err := xpath.ToGNMIPath(path)
+		// use yparser iso xpath library since the xpath library ahs an issue with multiple paths
+		p, err := yparser.ToGNMIPath(path)
 		if err != nil {
 			return err
 		}
@@ -196,7 +196,8 @@ func (r *reconciler) reconcileUpdate(ctx context.Context, resource *ygotnddp.Ndd
 	}
 	updates := []*gnmi.Update{}
 	for _, u := range resource.Update {
-		p, err := xpath.ToGNMIPath(*u.Path)
+		// use yparser iso xpath library since the xpath library ahs an issue with multiple paths
+		p, err := yparser.ToGNMIPath(*u.Path)
 		if err != nil {
 			return err
 		}
@@ -251,7 +252,8 @@ func (r *reconciler) reconcileDelete(ctx context.Context, resource *ygotnddp.Ndd
 	murder := false
 	for _, xp := range resource.Path {
 		log.Debug("reconciled resource config start", "path", xp)
-		path, err := xpath.ToGNMIPath(xp)
+		// use yparser iso xpath library since the xpath library ahs an issue with multiple paths
+		path, err := yparser.ToGNMIPath(xp)
 		if err != nil {
 			return err
 		}

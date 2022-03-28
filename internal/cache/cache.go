@@ -233,7 +233,9 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 	for _, u := range updates {
 		fullPath := cleanPath(u.GetPath())
 		val := u.GetVal()
-		fmt.Printf("ValidateUpdate origin: %s: path: %s, val: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), val)
+		if origin == Origin_Subscription {
+			fmt.Printf("ValidateUpdate origin: %s: path: %s, val: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), val)
+		}
 	}
 
 	//var goStruct ygot.ValidatedGoStruct
@@ -241,7 +243,10 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 		fullPath := cleanPath(u.GetPath())
 		val := u.GetVal()
 
-		fmt.Printf("ValidateUpdate origin: %s: path: %s, val: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), val)
+		if origin == Origin_Subscription {
+			fmt.Printf("ValidateUpdate origin: %s: path: %s, val: %v\n", origin, yparser.GnmiPath2XPath(fullPath, true), val)
+		}
+
 		//	if replace {
 		//		fmt.Printf("ValidateUpdate path: %s, val: %v\n", yparser.GnmiPath2XPath(fullPath, true), val)
 		//	}
@@ -335,7 +340,7 @@ func (c *cache) ValidateUpdate(target string, updates []*gnmi.Update, replace, j
 				return errors.Wrap(err, "cannot convert leaf node to scalar type")
 			}
 
-			if !replace {
+			if !replace && origin == Origin_Subscription {
 				fmt.Printf("ValidateUpdate origin: %s scalar nodeVal: %v\n", origin, nodeVal)
 			}
 

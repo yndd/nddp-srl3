@@ -53,7 +53,8 @@ var _ webhook.Defaulter = &Srl3Device{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Srl3Device) Default() {
-	srl3devicelog.Info("default", "name", r.Name, "device spec", r.Spec.Properties)
+	//srl3devicelog.Info("default", "name", r.Name, "device spec", r.Spec.Properties.Raw)
+	srl3devicelog.Info("webhook default", "name", r.Name)
 
 	/*
 		b, err := json.Marshal(r.Spec.Properties)
@@ -90,14 +91,15 @@ var _ webhook.Validator = &Srl3Device{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Srl3Device) ValidateCreate() error {
-	srl3devicelog.Info("validate create", "name", r.Name, "device spec", r.Spec.Properties)
+	srl3devicelog.Info("validate create", "name", r.Name)
+	//srl3devicelog.Info("validate create", "name", r.Name, "device spec", string(r.Spec.Properties.Raw))
 
 	var allErrs field.ErrorList
 
 	// TBD check if network node reference exists
 
 	// validate the spec
-	if err := ValidateSpec(r.Spec.Properties); err != nil {
+	if err := ValidateSpec(r.Spec.Properties.Raw); err != nil {
 		allErrs = append(allErrs, err)
 	}
 
@@ -112,13 +114,14 @@ func (r *Srl3Device) ValidateCreate() error {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Srl3Device) ValidateUpdate(old runtime.Object) error {
-	srl3devicelog.Info("validate update", "name", r.Name, "device spec", r.Spec.Properties)
+	srl3devicelog.Info("validate update", "name", r.Name)
+	//srl3devicelog.Info("validate update", "name", r.Name, "device spec", string(r.Spec.Properties.Raw))
 	var allErrs field.ErrorList
 
 	// TODO check if the node reference changed
 
 	// validate the spec
-	if err := ValidateSpec(r.Spec.Properties); err != nil {
+	if err := ValidateSpec(r.Spec.Properties.Raw); err != nil {
 		allErrs = append(allErrs, err)
 	}
 
@@ -134,7 +137,7 @@ func (r *Srl3Device) ValidateUpdate(old runtime.Object) error {
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *Srl3Device) ValidateDelete() error {
-	srl3devicelog.Info("validate delete", "name", r.Name, "device spec", r.Spec.Properties)
-
+	//srl3devicelog.Info("validate delete", "name", r.Name, "device spec", string(r.Spec.Properties.Raw))
+	srl3devicelog.Info("validate delete", "name", r.Name)
 	return nil
 }

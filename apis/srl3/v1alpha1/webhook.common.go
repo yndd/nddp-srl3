@@ -17,21 +17,12 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"encoding/json"
-
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-func ValidateSpec(properties runtime.RawExtension) *field.Error {
-	b, err := json.Marshal(properties)
-	if err != nil {
-		return field.Invalid(field.NewPath("spec"), string(properties.Raw), err.Error())
-	}
-
-	_, err = m.NewConfigStruct(b, false)
-	if err != nil {
-		return field.Invalid(field.NewPath("spec"), string(properties.Raw), err.Error())
+func ValidateSpec(spec []byte) *field.Error {
+	if _, err := m.NewConfigStruct(spec, false); err != nil {
+		return field.Invalid(field.NewPath("spec"), string(spec), err.Error())
 	}
 
 	return nil

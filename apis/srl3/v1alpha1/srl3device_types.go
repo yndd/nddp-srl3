@@ -49,7 +49,7 @@ type DeviceStatus struct {
 // +kubebuilder:printcolumn:name="SYNC",type="string",JSONPath=".status.conditions[?(@.kind=='Synced')].status"
 // +kubebuilder:printcolumn:name="ROOTPATH",type="string",JSONPath=".status.conditions[?(@.kind=='RootPathValidationSuccess')].status"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:resource:categories={ndd,srl3}
+// +kubebuilder:resource:categories={ndd,nddp}
 type Srl3Device struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

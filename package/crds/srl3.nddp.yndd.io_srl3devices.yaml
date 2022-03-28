@@ -12,7 +12,7 @@ spec:
   names:
     categories:
     - ndd
-    - srl3
+    - nddp
     kind: Srl3Device
     listKind: Srl3DeviceList
     plural: srl3devices
