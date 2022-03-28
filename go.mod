@@ -3,19 +3,16 @@ module github.com/yndd/nddp-srl3
 go 1.17
 
 require (
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/openconfig/gnmi v0.0.0-20220131173555-39aa74195f0d
 	github.com/openconfig/goyang v1.0.0
 	github.com/openconfig/ygot v0.16.1
-	github.com/yndd/ndd-runtime v0.3.6
+	github.com/yndd/ndd-runtime v0.4.6
 	google.golang.org/grpc v1.44.0
-	google.golang.org/protobuf v1.27.1 // indirect
 	k8s.io/apimachinery v0.22.5
 	sigs.k8s.io/controller-runtime v0.9.3
 )
 
 require (
-	github.com/google/gnxi v0.0.0-20200508145201-92c6d0d3ec3b
 	github.com/google/go-cmp v0.5.7
 	github.com/karimra/gnmic v0.24.1
 	github.com/pkg/errors v0.9.1
@@ -30,6 +27,8 @@ require (
 	k8s.io/api v0.22.5
 	k8s.io/client-go v0.22.5
 )
+
+require github.com/golang/mock v1.6.0
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
@@ -71,7 +70,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.6.0 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
@@ -87,6 +86,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
+	github.com/hashicorp/go-msgpack v1.1.5 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.0 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
@@ -151,6 +151,7 @@ require (
 	google.golang.org/api v0.70.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220222213610-43724f9ea8cf // indirect
+	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
