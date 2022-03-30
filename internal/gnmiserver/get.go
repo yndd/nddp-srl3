@@ -174,12 +174,18 @@ func processYgotStruct(entry *ytypes.TreeNode, nodeStruct ygot.GoStruct, model *
 		return err
 	}
 
+	FirstPartPath := []*gnmi.PathElem{}
+	if entry.Path != nil && entry.Path.Elem != nil {
+		FirstPartPath = entry.Path.Elem
+	}
+
 	// iterate over the notifications and their enclosed updates, which contain all the leaf values and their paths
 	// they will then one by one be added to the resultCollection ygotstruct
 	for _, n := range notifications {
 		for _, u := range n.GetUpdate() {
 			// construct the path that the value needs to go into
-			path := &gnmi.Path{Elem: append(entry.Path.Elem, u.Path.Elem...)}
+
+			path := &gnmi.Path{Elem: append(FirstPartPath, u.Path.Elem...)}
 			// add the single value to the resultCollection ygot device.
 			err = ytypes.SetNode(model.SchemaTreeRoot, resultCollectorYgotDevice, path, u.Val, &ytypes.InitMissingElements{})
 			if err != nil {

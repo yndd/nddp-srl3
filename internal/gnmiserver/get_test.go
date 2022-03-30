@@ -120,6 +120,25 @@ func Test_populateNotification(t *testing.T) {
 				populateNotificationCheckNumUpdates(1),
 			},
 		},
+		{
+			description: "Check without any path elements",
+			gostruct:    getDev1(),
+			req: getGnmiGetReq(
+				[]*gnmi.Path{
+					{
+						Elem: []*gnmi.PathElem{},
+					},
+				},
+				&gnmi.Path{},
+			),
+			model:  devmodel,
+			ts:     ts,
+			prefix: prefix,
+			resultCheck: []populateNotificationChecker{
+				populateNotificationCheckError(),
+				populateNotificationCheckNumUpdates(1),
+			},
+		},
 	}
 
 	// -------------------------------------
