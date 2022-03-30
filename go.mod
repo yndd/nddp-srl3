@@ -6,7 +6,7 @@ require (
 	github.com/openconfig/gnmi v0.0.0-20220131173555-39aa74195f0d
 	github.com/openconfig/goyang v1.0.0
 	github.com/openconfig/ygot v0.16.1
-	github.com/yndd/ndd-runtime v0.4.6
+	github.com/yndd/ndd-runtime v0.4.7
 	google.golang.org/grpc v1.44.0
 	k8s.io/apimachinery v0.22.5
 	sigs.k8s.io/controller-runtime v0.9.3
@@ -20,7 +20,7 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/yndd/ndd-core v0.1.7
 	github.com/yndd/ndd-yang v0.2.7
-	github.com/yndd/ndda-network v0.1.35
+	github.com/yndd/ndda-network v0.1.43
 	github.com/yndd/nddo-runtime v0.0.73
 	github.com/yndd/nddp-system v0.2.3
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
