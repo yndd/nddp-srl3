@@ -119,6 +119,15 @@ func populateNotification(goStruct ygot.GoStruct, req *gnmi.GetRequest, model *m
 			node := entry.Data
 			nodeStruct, isYgotStruct := node.(ygot.GoStruct)
 
+			// it seems like there is a chance we get nil structs,
+			// these should be skipped
+			// TODO: To me it seems like we need this due to a BUG. this is triggered through the tests, when querying for
+			// for ipv4 in wildcard interface + wildcard subinterface... the ipv6 only subinterface will appear with a nil pointer.
+			// Should be checked if this is expected or needs to be fixed in the ygot library.
+			if reflect.ValueOf(entry.Data).Kind() == reflect.Ptr && reflect.ValueOf(entry.Data).IsNil() {
+				continue
+			}
+
 			// if not ok, this mut be a leafnode, meaning a scalar value instead of any ygot struct
 			if !isYgotStruct {
 				update, err := createLeafNodeUpdate(node, fullPath, model)
