@@ -131,24 +131,9 @@ func populateNotification(goStruct ygot.GoStruct, req *gnmi.GetRequest, model *m
 				//update, err = createYgotStructNodeUpdate(nodeStruct, path, req.GetEncoding())
 				ygotstructProcessed = true
 
-				// convert config to GnmiNotification
-				notifications, err := ygot.TogNMINotifications(nodeStruct, 0, ygot.GNMINotificationsConfig{UsePathElem: true})
+				err := processYgotStruct(entry, nodeStruct, model, resultCollectorYgotDevice)
 				if err != nil {
 					return nil, err
-				}
-
-				// iterate over the notifications and their enclosed updates, which contain all the leaf values and their paths
-				// they will then one by one be added to the resultCollection ygotstruct
-				for _, n := range notifications {
-					for _, u := range n.GetUpdate() {
-						// construct the path that the value needs to go into
-						path := &gnmi.Path{Elem: append(entry.Path.Elem, u.Path.Elem...)}
-						// add the single value to the resultCollection ygot device.
-						err = ytypes.SetNode(model.SchemaTreeRoot, resultCollectorYgotDevice, path, u.Val, &ytypes.InitMissingElements{})
-						if err != nil {
-							return nil, err
-						}
-					}
 				}
 			}
 		}
@@ -169,6 +154,31 @@ func populateNotification(goStruct ygot.GoStruct, req *gnmi.GetRequest, model *m
 		}
 	}
 	return notifications, nil
+}
+
+// processYgotStruct processes the ygot.GoStruct and combine it into the given resultCollectorYgotDevice
+// with the purpose of merging the different results of a wildcard query into a single gnmi.update
+func processYgotStruct(entry *ytypes.TreeNode, nodeStruct ygot.GoStruct, model *model.Model, resultCollectorYgotDevice ygot.GoStruct) error {
+	// convert config to GnmiNotification
+	notifications, err := ygot.TogNMINotifications(nodeStruct, 0, ygot.GNMINotificationsConfig{UsePathElem: true})
+	if err != nil {
+		return err
+	}
+
+	// iterate over the notifications and their enclosed updates, which contain all the leaf values and their paths
+	// they will then one by one be added to the resultCollection ygotstruct
+	for _, n := range notifications {
+		for _, u := range n.GetUpdate() {
+			// construct the path that the value needs to go into
+			path := &gnmi.Path{Elem: append(entry.Path.Elem, u.Path.Elem...)}
+			// add the single value to the resultCollection ygot device.
+			err = ytypes.SetNode(model.SchemaTreeRoot, resultCollectorYgotDevice, path, u.Val, &ytypes.InitMissingElements{})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // ptr wraps the given value with pointer: V => *V, *V => **V, etc.
