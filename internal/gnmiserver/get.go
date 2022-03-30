@@ -25,20 +25,15 @@ import (
 	"time"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
-	"github.com/openconfig/gnmi/proto/gnmi_ext"
 	"github.com/openconfig/gnmi/value"
 	"github.com/openconfig/ygot/util"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/openconfig/ygot/ytypes"
 	"github.com/yndd/ndd-yang/pkg/yparser"
-	"github.com/yndd/nddp-srl3/internal/cache"
 	"github.com/yndd/nddp-srl3/internal/model"
-	"github.com/yndd/nddp-srl3/internal/shared"
 
 	//systemv1alpha1 "github.com/yndd/nddp-system/apis/system/v1alpha1"
-	"github.com/yndd/nddp-system/pkg/failedmsg"
-	"github.com/yndd/nddp-system/pkg/gvkresource"
-	"github.com/yndd/nddp-system/pkg/ygotnddp"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -84,24 +79,8 @@ func (s *GnmiServerImpl) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, 
 		return nil, status.Errorf(codes.Unavailable, "cache not ready")
 	}
 
-	// if the request is for the system resources per leaf we take the target/crDeviceName iso
-	// adding the system part
-	systemTarget := shared.GetCrSystemDeviceName(target)
-
-	extensions := req.GetExtension()
-	if len(extensions) > 0 {
-		// if the extension is set we check the resourcelist
-		// this is needed for the device driver to know when a create should be triggered
-		err := processExtension(systemTarget, s.cache, extensions)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var goStruct ygot.GoStruct
-	goStruct = s.cache.GetValidatedGoStruct(target) // no DeepCopy required, since we get a deepcopy already
+	goStruct := s.cache.GetValidatedGoStruct(target) // no DeepCopy required, since we get a deepcopy already
 	ts := time.Now().UnixNano()
-
 	model := s.cache.GetModel(target)
 
 	return populateNotification(goStruct, req, model, ts, prefix)
@@ -198,45 +177,6 @@ func ptr(v reflect.Value) reflect.Value {
 	pv := reflect.New(pt.Elem())  // create a reflect.Value of type *T.
 	pv.Elem().Set(v)              // sets pv to point to underlying value of v.
 	return pv
-}
-
-// processExtension the cache returned result might have gnmi extensions attached. Here these extension are being processsed
-func processExtension(systemTarget string, cache cache.Cache, extensions []*gnmi_ext.Extension) error {
-	// if the cache is exhausted we need to backoff
-	exhausted, err := cache.GetSystemExhausted(systemTarget)
-	if err != nil {
-		return err
-	}
-	if *exhausted != 0 {
-		return status.Errorf(codes.ResourceExhausted, "device exhausted")
-	}
-	gvkName := extensions[0].GetRegisteredExt().GetMsg()
-	if string(gvkName) == gvkresource.Operation_GetResourceNameFromPath {
-		return nil
-	}
-
-	resource, err := cache.GetSystemResource(systemTarget, string(gvkName))
-	if err != nil {
-		return status.Error(codes.Internal, err.Error())
-	}
-	if resource == nil {
-		return status.Error(codes.NotFound, "resource does not exist")
-	}
-	switch resource.Status {
-	case ygotnddp.NddpSystem_ResourceStatus_PENDING:
-		return status.Error(codes.AlreadyExists, "")
-	case ygotnddp.NddpSystem_ResourceStatus_FAILED:
-		m := &failedmsg.Message{
-			Spec: *resource.Spec,
-			Msg:  *resource.Reason,
-		}
-		errMsgSpec, err := m.Marshal()
-		if err != nil {
-			return status.Error(codes.Internal, err.Error())
-		}
-		return status.Error(codes.FailedPrecondition, string(errMsgSpec))
-	}
-	return nil
 }
 
 // createLeafNodeUpdate processes the list of returned nodes from the cache, which are Leaf Nodes, carrying terminal values

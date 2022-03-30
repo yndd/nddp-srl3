@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"strings"
 
 	//"strings"
 	"time"
@@ -28,7 +27,6 @@ import (
 	"github.com/karimra/gnmic/target"
 	gnmitypes "github.com/karimra/gnmic/types"
 	"github.com/openconfig/gnmi/proto/gnmi"
-	"github.com/openconfig/gnmi/proto/gnmi_ext"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/pkg/errors"
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
@@ -42,7 +40,6 @@ import (
 	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-srl3/internal/shared"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
-	"github.com/yndd/nddp-system/pkg/failedmsg"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 	"google.golang.org/grpc/codes"
@@ -103,8 +100,7 @@ func SetupDevice(mgr ctrl.Manager, o controller.Options, nddcopts *shared.NddCon
 			gnmiAddress: nddcopts.GnmiAddress},
 		),
 		managed.WithValidator(&validatorDevice{
-			log: nddcopts.Logger,
-			//deviceSchema: nddcopts.DeviceSchema,
+			log:         nddcopts.Logger,
 			deviceModel: dm,
 			systemModel: sm,
 		},
@@ -142,39 +138,197 @@ type validatorDevice struct {
 	systemModel *model.Model
 }
 
-// ValidateResourceIndexes validates if the indexes of a resource got changed
-// if so we need to delete the original resource, because it will be dangling if we dont delete it
-func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Managed, resourceList map[string]*ygotnddp.NddpSystem_Gvk) (managed.ValidateRootPathsObservation, error) {
+// GetCrStatus validates the status if the CR in the system
+func (v *validatorDevice) GetCrStatus(ctx context.Context, mg resource.Managed, systemCfg *ygotnddp.Device) (managed.CrObservation, error) {
 	log := v.log.WithValues("Resource", mg.GetName())
-	log.Debug("ValidateRootPaths ...")
+	log.Debug("validate GetCrStatus ...")
+
+	if *systemCfg.Cache.Exhausted != 0 {
+		return managed.CrObservation{
+			Exhausted: true,
+		}, nil
+	}
+
+	gvkName := gvkresource.GetGvkName(mg)
+
+	gvk, exists := systemCfg.Gvk[gvkName]
+	if !exists {
+		return managed.CrObservation{
+			Exists: false,
+		}, nil
+	}
+	switch gvk.Status {
+	case ygotnddp.NddpSystem_ResourceStatus_PENDING:
+		return managed.CrObservation{
+			Exists:  true,
+			Pending: true,
+		}, nil
+	case ygotnddp.NddpSystem_ResourceStatus_FAILED:
+		return managed.CrObservation{
+			Exists:  true,
+			Failed:  true,
+			Message: *gvk.Reason,
+		}, nil
+	}
+
+	return managed.CrObservation{
+		Exists: true,
+	}, nil
+}
+
+func (v *validatorDevice) ValidateCrSpecUpdate(ctx context.Context, mg resource.Managed, runningCfg []byte) (managed.CrSpecObservation, error) {
+	log := v.log.WithValues("Resource", mg.GetName())
+	log.Debug("validate ValidateCrSpecUpdate ...")
 
 	cr, ok := mg.(*srlv1alpha1.Srl3Device)
 	if !ok {
-		return managed.ValidateRootPathsObservation{}, errors.New(errUnexpectedDevice)
+		return managed.CrSpecObservation{}, errors.New(errUnexpectedDevice)
 	}
 
-	for resourceName := range resourceList {
-		log.Debug("ValidateRootPaths resourceList", "resourceName", resourceName)
-	}
-
-	b, err := json.Marshal(cr.Spec.Properties)
+	// Validate if the spec has any issues when merged with the actual config
+	runGoStruct, err := v.deviceModel.NewConfigStruct(runningCfg, true)
 	if err != nil {
-		return managed.ValidateRootPathsObservation{}, err
+		return managed.CrSpecObservation{}, err
 	}
+
+	specGoStruct, err := v.deviceModel.NewConfigStruct(cr.Spec.Properties.Raw, false)
+	if err != nil {
+		return managed.CrSpecObservation{}, err
+	}
+
+	if err := ygot.MergeStructInto(runGoStruct, specGoStruct, &ygot.MergeOverwriteExistingFields{}); err != nil {
+		return managed.CrSpecObservation{}, err
+	}
+
+	if err := runGoStruct.Validate(); err != nil {
+		return managed.CrSpecObservation{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
+	return managed.CrSpecObservation{
+		Success: true,
+	}, nil
+}
+
+func (v *validatorDevice) ValidateCrSpecDelete(ctx context.Context, mg resource.Managed, runningCfg []byte) (managed.CrSpecObservation, error) {
+	log := v.log.WithValues("Resource", mg.GetName())
+	log.Debug("validate ValidateCrSpecDelete ...")
+
+	return managed.CrSpecObservation{Success: true}, nil
+}
+
+func (v *validatorDevice) GetCrSpecDiff(ctx context.Context, mg resource.Managed, systemCfg *ygotnddp.Device) (managed.CrSpecDiffObservation, error) {
+	log := v.log.WithValues("Resource", mg.GetName())
+	log.Debug("validate GetCrSpecDiff ...")
+
+	cr, ok := mg.(*srlv1alpha1.Srl3Device)
+	if !ok {
+		return managed.CrSpecDiffObservation{}, errors.New(errUnexpectedDevice)
+	}
+	deletes := []*gnmi.Path{}
+	updates := []*gnmi.Update{}
+	gvkName := gvkresource.GetGvkName(mg)
+	if gvk, exists := systemCfg.Gvk[gvkName]; exists {
+		srcConfig, err := v.deviceModel.NewConfigStruct(cr.Spec.Properties.Raw, false)
+		if err != nil {
+			return managed.CrSpecDiffObservation{}, err
+		}
+
+		specConfig, err := v.deviceModel.NewConfigStruct([]byte(*gvk.Spec), false)
+		if err != nil {
+			return managed.CrSpecDiffObservation{}, err
+		}
+
+		// create a diff of the actual compared to the to-become-new config
+		actualVsSpecDiff, err := ygot.Diff(specConfig, srcConfig, &ygot.DiffPathOpt{MapToSinglePath: true})
+		if err != nil {
+			return managed.CrSpecDiffObservation{}, err
+		}
+
+		deletes, updates = validateNotification(actualVsSpecDiff)
+
+	}
+	return managed.CrSpecDiffObservation{
+		Deletes: deletes,
+		Updates: updates,
+	}, nil
+}
+
+func (v *validatorDevice) GetCrActualDiff(ctx context.Context, mg resource.Managed, runningCfg []byte) (managed.CrActualDiffObservation, error) {
+	log := v.log.WithValues("Resource", mg.GetName())
+	log.Debug("validate GetCrActualDiff ...")
+
+	cr, ok := mg.(*srlv1alpha1.Srl3Device)
+	if !ok {
+		return managed.CrActualDiffObservation{}, errors.New(errUnexpectedDevice)
+	}
+	srcConfig, err := v.deviceModel.NewConfigStruct(runningCfg, false)
+	if err != nil {
+		return managed.CrActualDiffObservation{}, err
+	}
+
+	specConfig, err := v.deviceModel.NewConfigStruct(cr.Spec.Properties.Raw, false)
+	if err != nil {
+		return managed.CrActualDiffObservation{}, err
+	}
+
+	// skipping specValidation, this will probably result in missing leaf leafrefs
+	srcConfigTmp, err := ygot.DeepCopy(srcConfig)
+	if err != nil {
+		return managed.CrActualDiffObservation{}, err
+	}
+	newConfig := srcConfigTmp.(*ygotsrl.Device) // Typecast
+	// Merge spec into newconfig, which is right now jsut the actual config
+	err = ygot.MergeStructInto(newConfig, specConfig)
+	if err != nil {
+		return managed.CrActualDiffObservation{}, err
+	}
+	// validate the new config
+	//err = newConfig.Validate()
+	//if err != nil {
+	//	return &observe{hasData: false}, nil
+	//}
+
+	// create a diff of the actual compared to the to-become-new config
+	actualVsSpecDiff, err := ygot.Diff(srcConfig, newConfig, &ygot.DiffPathOpt{MapToSinglePath: true})
+	if err != nil {
+		return managed.CrActualDiffObservation{}, err
+	}
+
+	deletes, updates := validateNotification(actualVsSpecDiff)
+
+	return managed.CrActualDiffObservation{
+		HasData:    true,
+		IsUpToDate: len(deletes) == 0 && len(updates) == 0,
+		Deletes:    deletes,
+		Updates:    updates,
+	}, nil
+
+}
+
+func (v *validatorDevice) GetRootPaths(ctx context.Context, mg resource.Managed) ([]string, error) {
+	log := v.log.WithValues("Resource", mg.GetName())
+	log.Debug("validate GetCrActualDiff ...")
+
+	cr, ok := mg.(*srlv1alpha1.Srl3Device)
+	if !ok {
+		return nil, errors.New(errUnexpectedDevice)
+	}
+
 	srldevice := &ygotsrl.Device{}
-	err = v.deviceModel.JsonUnmarshaler(b, srldevice)
-	if err != nil {
-		return managed.ValidateRootPathsObservation{}, err
+	if err := v.deviceModel.JsonUnmarshaler(cr.Spec.Properties.Raw, srldevice); err != nil {
+		return nil, err
 	}
 
 	gnmiNotifications, err := ygot.TogNMINotifications(srldevice, time.Now().UnixNano(), ygot.GNMINotificationsConfig{UsePathElem: true})
 	if err != nil {
-		return managed.ValidateRootPathsObservation{}, err
+		return nil, err
 	}
 
 	crRootPaths, err := v.getRootPaths(gnmiNotifications[0])
 	if err != nil {
-		return managed.ValidateRootPathsObservation{}, err
+		return nil, err
 	}
 
 	rootPaths := []string{}
@@ -182,12 +336,7 @@ func (v *validatorDevice) ValidateRootPaths(ctx context.Context, mg resource.Man
 		//log.Debug("ValidateRootPaths rootPaths", "path", yparser.GnmiPath2XPath(crRootPath, true))
 		rootPaths = append(rootPaths, yparser.GnmiPath2XPath(crRootPath, true))
 	}
-
-	return managed.ValidateRootPathsObservation{
-		Changed:     false,
-		RootPaths:   rootPaths,
-		DeletePaths: []*gnmi.Path{}, // TODO find delta
-	}, nil
+	return rootPaths, err
 }
 
 // A connector is expected to produce an ExternalClient when its Connect method
@@ -267,191 +416,6 @@ func (e *externalDevice) Close() {
 	e.client.Close()
 }
 
-func (e *externalDevice) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	log := e.log.WithValues("Resource", mg.GetName())
-	log.Debug("Observing ...")
-
-	cr, ok := mg.(*srlv1alpha1.Srl3Device)
-	if !ok {
-		return managed.ExternalObservation{}, errors.New(errUnexpectedDevice)
-	}
-
-	gvkName := gvkresource.GetGvkName(mg)
-
-	crDeviceName := "ygot." + shared.GetCrDeviceName(mg.GetNamespace(), cr.GetNetworkNodeReference().Name)
-
-	// gnmi get request
-	req := &gnmi.GetRequest{
-		Prefix:   &gnmi.Path{Target: crDeviceName},
-		Path:     []*gnmi.Path{{}},
-		Encoding: gnmi.Encoding_JSON,
-		Extension: []*gnmi_ext.Extension{
-			{Ext: &gnmi_ext.Extension_RegisteredExt{
-				RegisteredExt: &gnmi_ext.RegisteredExtension{Id: gnmi_ext.ExtensionID_EID_EXPERIMENTAL, Msg: []byte(gvkName)}}},
-		},
-	}
-
-	// gnmi get response
-	exists := true
-	resp, err := e.client.Get(ctx, req)
-	if err != nil {
-		if er, ok := status.FromError(err); ok {
-			switch er.Code() {
-			case codes.ResourceExhausted:
-				// we use this to signal the device or cache is exhausted
-				return managed.ExternalObservation{
-					Ready:      false,
-					Exhausted:  true,
-					Exists:     false,
-					Pending:    true,
-					Failed:     true,
-					HasData:    false,
-					IsUpToDate: false,
-				}, nil
-			case codes.Unavailable:
-				// we use this to signal not ready
-				return managed.ExternalObservation{
-					Ready:      false,
-					Exists:     false,
-					Pending:    true,
-					Failed:     true,
-					HasData:    false,
-					IsUpToDate: false,
-				}, nil
-			case codes.NotFound:
-				// the k8s resource does not exists but the data can still exist
-				// if data exists it means we go from UMR -> MR
-				exists = false
-			case codes.AlreadyExists:
-				// the system cache has the resource but the action did not complete so we should skip the next reconcilation
-				// loop and wait
-				return managed.ExternalObservation{
-					Ready:      true,
-					Exhausted:  false,
-					Exists:     true,
-					Pending:    true,
-					Failed:     false,
-					HasData:    false,
-					IsUpToDate: false,
-				}, nil
-			case codes.FailedPrecondition:
-				// the k8s resource exists but is in failed status, we return the error message and the original spec
-				// given gnmi when an error occurs provides an empty response, we marshal the spec and the error message
-				// together and unmarshal it at the client
-				// the spec is used to compare the new spec against the spec hat failed and if a difference is seen we will retry
-				// if no difference is seen we stay in failed status
-				errMsg, err := failedmsg.UnMarshalErrorMsgWithSpec(er.Message())
-				if err != nil {
-					return managed.ExternalObservation{}, err
-				}
-				// we build a gnmi response to be able to reuse the observe code
-				resp = getGnmiResp(errMsg.Spec)
-				failedObserve, err := e.processObserve(cr.Spec.Properties, resp)
-				if err != nil {
-					return managed.ExternalObservation{}, err
-				}
-
-				log.Debug("Failed Observe Response", "failedObserve", *failedObserve, "hasData", failedObserve.hasData, "upToDate", failedObserve.upToDate)
-				if !failedObserve.hasData || failedObserve.upToDate {
-					// there is no difference between the previous spec and the current spec, so we dont retry
-					// given the previous attempt failed
-					return managed.ExternalObservation{
-						Ready:      true,
-						Exists:     true,
-						Pending:    false,
-						Failed:     true,
-						Message:    errMsg.Msg,
-						HasData:    false,
-						IsUpToDate: false,
-					}, nil
-				} else {
-					// debug first
-					for _, p := range failedObserve.deletes {
-						log.Debug("Failed Observe Response delete", "path", yparser.GnmiPath2XPath(p, true))
-					}
-					for _, u := range failedObserve.updates {
-						log.Debug("Failed Observe Response update", "path", yparser.GnmiPath2XPath(u.GetPath(), true))
-					}
-					// debug end
-					// this should trigger an update
-					return managed.ExternalObservation{
-						Ready:      true,
-						Exists:     false, // we set exists to false to ensure the resource is recreated
-						Pending:    false,
-						Failed:     false,
-						HasData:    false,
-						IsUpToDate: false,
-						Deletes:    []*gnmi.Path{},
-						Updates:    []*gnmi.Update{},
-					}, nil
-				}
-			}
-		}
-	}
-
-	observe, err := e.processObserve(cr.Spec.Properties, resp)
-	if err != nil {
-		log.Debug("Observe Response", "error", err)
-		if strings.Contains(err.Error(), "not found") {
-			return managed.ExternalObservation{
-				Ready:      true,
-				Exists:     false, // we set exists to false to ensure the resource is recreated
-				Pending:    false,
-				Failed:     false,
-				HasData:    false,
-				IsUpToDate: false,
-				Deletes:    []*gnmi.Path{},
-				Updates:    []*gnmi.Update{},
-			}, nil
-		}
-		return managed.ExternalObservation{}, err
-	}
-	log.Debug("Observe Response", "observe", observe)
-
-	if !observe.hasData {
-		// No Data exists -> Create it or Delete is complete
-		//log.Debug("Observing Response:", "observe", observe, "exists", exists, "Response", resp)
-		return managed.ExternalObservation{
-			Ready:      true,
-			Exists:     exists,
-			Pending:    false,
-			Failed:     false,
-			HasData:    false,
-			IsUpToDate: false,
-			Deletes:    observe.deletes,
-			Updates:    observe.updates,
-		}, nil
-	}
-	// Data exists
-
-	if !observe.upToDate {
-		// resource is NOT up to date
-		log.Debug("Observing Response: resource NOT up to date", "Observe", observe, "exists", exists)
-		return managed.ExternalObservation{
-			Ready:      true,
-			Exists:     exists,
-			Pending:    false,
-			Failed:     false,
-			HasData:    true,
-			IsUpToDate: false,
-			Deletes:    observe.deletes,
-			Updates:    observe.updates,
-		}, nil
-	}
-	// resource is up to date
-	//log.Debug("Observing Response: resource up to date", "Observe", observe, "Response", resp)
-	return managed.ExternalObservation{
-		Ready:      true,
-		Exists:     exists,
-		Pending:    false,
-		Failed:     false,
-		HasData:    true,
-		IsUpToDate: true,
-		Deletes:    observe.deletes,
-		Updates:    observe.updates,
-	}, nil
-}
-
 func (e *externalDevice) Create(ctx context.Context, mg resource.Managed, obs managed.ExternalObservation) error {
 	log := e.log.WithValues("Resource", mg.GetName())
 	log.Debug("Creating ...")
@@ -524,7 +488,7 @@ func (e *externalDevice) Delete(ctx context.Context, mg resource.Managed, obs ma
 	return nil
 }
 
-func (e *externalDevice) GetResourceList(ctx context.Context, mg resource.Managed) (map[string]*ygotnddp.NddpSystem_Gvk, error) {
+func (e *externalDevice) GetSystemConfig(ctx context.Context, mg resource.Managed) (*ygotnddp.Device, error) {
 	// get system device list
 	crSystemDeviceName := "ygot." + shared.GetCrSystemDeviceName(shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name))
 	// gnmi get request
@@ -537,7 +501,13 @@ func (e *externalDevice) GetResourceList(ctx context.Context, mg resource.Manage
 	// gnmi get response
 	resp, err := e.client.Get(ctx, reqSystemCache)
 	if err != nil {
-		return nil, err
+		if er, ok := status.FromError(err); ok {
+			switch er.Code() {
+			case codes.Unavailable:
+				// we use this to signal not ready
+				return nil, nil
+			}
+		}
 	}
 	var systemCache interface{}
 	if len(resp.GetNotification()) == 0 {
@@ -570,21 +540,45 @@ func (e *externalDevice) GetResourceList(ctx context.Context, mg resource.Manage
 		return nil, errors.New("wrong object nddp")
 	}
 
-	return nddpDevice.Gvk, nil
+	return nddpDevice, nil
 }
 
-func getGnmiResp(msg string) *gnmi.GetResponse {
-	return &gnmi.GetResponse{
-		Notification: []*gnmi.Notification{
-			{
-				Timestamp: time.Now().UnixNano(),
-				Update: []*gnmi.Update{
-					{
-						Path: &gnmi.Path{},
-						Val:  &gnmi.TypedValue{Value: &gnmi.TypedValue_JsonVal{JsonVal: []byte(msg)}},
-					},
-				},
-			},
-		},
+func (e *externalDevice) GetRunningConfig(ctx context.Context, mg resource.Managed) ([]byte, error) {
+	// get actual device config
+	crDeviceName := "ygot." + shared.GetCrDeviceName(mg.GetNamespace(), mg.GetNetworkNodeReference().Name)
+	// gnmi get request
+	reqRunningConfig := &gnmi.GetRequest{
+		Prefix:   &gnmi.Path{Target: crDeviceName},
+		Path:     []*gnmi.Path{{}},
+		Encoding: gnmi.Encoding_JSON,
 	}
+	// gnmi get response
+	resp, err := e.client.Get(ctx, reqRunningConfig)
+	if err != nil {
+		if er, ok := status.FromError(err); ok {
+			switch er.Code() {
+			case codes.Unavailable:
+				// we use this to signal not ready
+				return nil, nil
+			}
+		}
+	}
+	var runningConfig interface{}
+	if len(resp.GetNotification()) == 0 {
+		return nil, nil
+	}
+	if len(resp.GetNotification()) != 0 && len(resp.GetNotification()[0].GetUpdate()) != 0 {
+		// get value from gnmi get response
+		runningConfig, err = yparser.GetValue(resp.GetNotification()[0].GetUpdate()[0].Val)
+		if err != nil {
+			return nil, errors.Wrap(err, errJSONMarshal)
+		}
+
+		switch runningConfig.(type) {
+		case nil:
+			// no actual config
+			return nil, nil
+		}
+	}
+	return json.Marshal(runningConfig)
 }
