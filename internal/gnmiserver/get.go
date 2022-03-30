@@ -100,11 +100,15 @@ func (s *GnmiServerImpl) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, 
 
 	var goStruct ygot.GoStruct
 	goStruct = s.cache.GetValidatedGoStruct(target) // no DeepCopy required, since we get a deepcopy already
-
-	notifications := make([]*gnmi.Notification, len(req.GetPath()))
 	ts := time.Now().UnixNano()
 
 	model := s.cache.GetModel(target)
+
+	return populateNotification(goStruct, req, model, ts, prefix)
+}
+
+func populateNotification(goStruct ygot.GoStruct, req *gnmi.GetRequest, model *model.Model, ts int64, prefix *gnmi.Path) ([]*gnmi.Notification, error) {
+	notifications := make([]*gnmi.Notification, len(req.GetPath()))
 	// process all the paths from the given request
 	for i, path := range req.GetPath() {
 		fullPath := path
@@ -124,18 +128,55 @@ func (s *GnmiServerImpl) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, 
 		// hence the updates are stored in a slice.
 		updates := []*gnmi.Update{}
 
+		// create a new NOS specific ygot Device from the model contained pointer
+		r := reflect.New(model.StructRootType.Elem())
+		// take the new NOS specific ygot Device and create a ygot.GoStruct pointer from it
+		// to work with in the following
+		resultCollectorYgotDevice := ptr(r).Elem().Interface().(ygot.GoStruct)
+
+		ygotstructProcessed := false
 		// generate updates for all the retrieved nodes
 		for _, entry := range nodes {
-			var update *gnmi.Update
 			node := entry.Data
 			nodeStruct, isYgotStruct := node.(ygot.GoStruct)
+
 			// if not ok, this mut be a leafnode, meaning a scalar value instead of any ygot struct
 			if !isYgotStruct {
-				update, err = createLeafNodeUpdate(node, fullPath, model)
+				update, err := createLeafNodeUpdate(node, fullPath, model)
+				if err != nil {
+					return nil, err
+				}
+				updates = append(updates, update)
 			} else {
 				// process ygot structs
-				update, err = createYgotStructNodeUpdate(nodeStruct, path, req.GetEncoding())
+				//update, err = createYgotStructNodeUpdate(nodeStruct, path, req.GetEncoding())
+				ygotstructProcessed = true
+
+				// convert config to GnmiNotification
+				notifications, err := ygot.TogNMINotifications(nodeStruct, 0, ygot.GNMINotificationsConfig{UsePathElem: true})
+				if err != nil {
+					return nil, err
+				}
+
+				// iterate over the notifications and their enclosed updates, which contain all the leaf values and their paths
+				// they will then one by one be added to the resultCollection ygotstruct
+				for _, n := range notifications {
+					for _, u := range n.GetUpdate() {
+						// construct the path that the value needs to go into
+						path := &gnmi.Path{Elem: append(entry.Path.Elem, u.Path.Elem...)}
+						// add the single value to the resultCollection ygot device.
+						err = ytypes.SetNode(model.SchemaTreeRoot, resultCollectorYgotDevice, path, u.Val, &ytypes.InitMissingElements{})
+						if err != nil {
+							return nil, err
+						}
+					}
+				}
 			}
+		}
+		// if the result contained a ygot.GoStruct and not just terminal values, we need to create the update
+		// now out of the data collected within the resultCollectorYgotDevice
+		if ygotstructProcessed {
+			update, err := createYgotStructNodeUpdate(resultCollectorYgotDevice, &gnmi.Path{}, req.GetEncoding())
 			if err != nil {
 				return nil, err
 			}
@@ -151,6 +192,14 @@ func (s *GnmiServerImpl) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, 
 	return notifications, nil
 }
 
+// ptr wraps the given value with pointer: V => *V, *V => **V, etc.
+func ptr(v reflect.Value) reflect.Value {
+	pt := reflect.PtrTo(v.Type()) // create a *T type.
+	pv := reflect.New(pt.Elem())  // create a reflect.Value of type *T.
+	pv.Elem().Set(v)              // sets pv to point to underlying value of v.
+	return pv
+}
+
 // processExtension the cache returned result might have gnmi extensions attached. Here these extension are being processsed
 func processExtension(systemTarget string, cache cache.Cache, extensions []*gnmi_ext.Extension) error {
 	// if the cache is exhausted we need to backoff
@@ -163,19 +212,6 @@ func processExtension(systemTarget string, cache cache.Cache, extensions []*gnmi
 	}
 	gvkName := extensions[0].GetRegisteredExt().GetMsg()
 	if string(gvkName) == gvkresource.Operation_GetResourceNameFromPath {
-		// procedure to get resource name
-		/*
-			updates, err := s.getResourceName(systemTarget, req.GetPath()[0])
-			if err != nil {
-				return nil, err
-			}
-			notifications[0] = &gnmi.Notification{
-				Timestamp: ts,
-				Prefix:    prefix,
-				Update:    updates,
-			}
-			return notifications, nil
-		*/
 		return nil
 	}
 
@@ -250,7 +286,6 @@ func createYgotStructNodeUpdate(nodeStruct ygot.GoStruct, path *gnmi.Path, reque
 		msg := fmt.Sprintf("error in constructing JSON tree from requested node: %v", err)
 		return nil, status.Error(codes.Internal, msg)
 	}
-
 	jsonDump, err := json.Marshal(jsonTree)
 	if err != nil {
 		msg := fmt.Sprintf("error in marshaling JSON tree to bytes: %v", err)
