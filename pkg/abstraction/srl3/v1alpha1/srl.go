@@ -9,8 +9,8 @@ import (
 
 	"github.com/openconfig/gnmi/proto/gnmi"
 	//networkv1alpha1 "github.com/yndd/ndda-network/apis/network/v1alpha1"
-	"github.com/yndd/ndda-network/pkg/ndda/itfceinfo"
 	"github.com/yndd/ndda-network/pkg/abstraction"
+	"github.com/yndd/ndda-network/pkg/ndda/itfceinfo"
 	"github.com/yndd/ndda-network/pkg/nodeitfceselector"
 	"github.com/yndd/ndda-network/pkg/ygotndda"
 	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"

@@ -7,8 +7,8 @@ import (
 
 	"github.com/openconfig/ygot/ygot"
 	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
-	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/ndd-runtime/pkg/meta"
+	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/nddo-runtime/pkg/intent"
 	"github.com/yndd/nddo-runtime/pkg/odns"
 	"github.com/yndd/nddo-runtime/pkg/resource"
