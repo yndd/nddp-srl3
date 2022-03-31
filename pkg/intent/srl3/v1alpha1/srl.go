@@ -7,6 +7,7 @@ import (
 
 	"github.com/openconfig/ygot/ygot"
 	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
+	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/ndd-runtime/pkg/meta"
 	"github.com/yndd/nddo-runtime/pkg/intent"
 	"github.com/yndd/nddo-runtime/pkg/odns"
@@ -65,7 +66,7 @@ func (x *srlintent) Destroy(ctx context.Context, mg resource.Managed, labels map
 func (x *srlintent) List(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
 	// local CR list
 	opts := []client.ListOption{
-		client.MatchingLabels{srlv1alpha1.LabelNddaOwner: odns.GetOdnsResourceKindName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind))},
+		client.MatchingLabels{nddov1.LabelNddaOwner: odns.GetOdnsResourceKindName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind))},
 	}
 	list := x.newDeviceList()
 	if err := x.client.List(ctx, list, opts...); err != nil {
@@ -120,10 +121,10 @@ func (x *srlintent) buildCR(mg resource.Managed, deviceName string, labels map[s
 			//strings.ToLower(x.name),
 			strings.ToLower(deviceName)})
 
-	labels[srlv1alpha1.LabelNddaDeploymentPolicy] = string(mg.GetDeploymentPolicy())
-	labels[srlv1alpha1.LabelNddaOwner] = odns.GetOdnsResourceKindName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind))
-	labels[srlv1alpha1.LabelNddaOwnerGeneration] = strconv.Itoa(int(mg.GetGeneration()))
-	labels[srlv1alpha1.LabelNddaDevice] = deviceName
+	labels[nddov1.LabelNddaDeploymentPolicy] = string(mg.GetDeploymentPolicy())
+	labels[nddov1.LabelNddaOwner] = odns.GetOdnsResourceKindName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind))
+	labels[nddov1.LabelNddaOwnerGeneration] = strconv.Itoa(int(mg.GetGeneration()))
+	labels[nddov1.LabelNddaDevice] = deviceName
 	//labels[srlv1alpha1.LabelNddaItfce] = itfceName
 
 	namespace := mg.GetNamespace()

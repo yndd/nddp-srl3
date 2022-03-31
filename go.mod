@@ -20,8 +20,8 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/yndd/ndd-core v0.1.7
 	github.com/yndd/ndd-yang v0.2.7
-	github.com/yndd/ndda-network v0.1.43
-	github.com/yndd/nddo-runtime v0.0.73
+	github.com/yndd/ndda-network v0.1.47
+	github.com/yndd/nddo-runtime v0.0.75
 	github.com/yndd/nddp-system v0.2.3
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.22.5

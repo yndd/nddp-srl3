@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
+	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/nddo-runtime/pkg/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -62,7 +63,7 @@ type IFSrl3Device interface {
 }
 
 func (x *Srl3Device) GetOwner() string {
-	if s, ok := x.GetLabels()[LabelNddaOwner]; !ok {
+	if s, ok := x.GetLabels()[nddov1.LabelNddaOwner]; !ok {
 		return ""
 	} else {
 		return s
@@ -80,7 +81,7 @@ func (x *Srl3Device) GetDeploymentPolicy() string {
 */
 
 func (x *Srl3Device) GetDeviceName() string {
-	if s, ok := x.GetLabels()[LabelNddaDevice]; !ok {
+	if s, ok := x.GetLabels()[nddov1.LabelNddaDevice]; !ok {
 		return ""
 	} else {
 		return s
@@ -88,7 +89,7 @@ func (x *Srl3Device) GetDeviceName() string {
 }
 
 func (x *Srl3Device) GetEndpointGroup() string {
-	if s, ok := x.GetLabels()[LabelNddaEndpointGroup]; !ok {
+	if s, ok := x.GetLabels()[nddov1.LabelNddaEndpointGroup]; !ok {
 		return ""
 	} else {
 		return s
@@ -96,7 +97,7 @@ func (x *Srl3Device) GetEndpointGroup() string {
 }
 
 func (x *Srl3Device) GetOrganization() string {
-	if s, ok := x.GetLabels()[LabelNddaOrganization]; !ok {
+	if s, ok := x.GetLabels()[nddov1.LabelNddaOrganization]; !ok {
 		return ""
 	} else {
 		return s
@@ -104,7 +105,7 @@ func (x *Srl3Device) GetOrganization() string {
 }
 
 func (x *Srl3Device) GetDeployment() string {
-	if s, ok := x.GetLabels()[LabelNddaDeployment]; !ok {
+	if s, ok := x.GetLabels()[nddov1.LabelNddaDeployment]; !ok {
 		return ""
 	} else {
 		return s
@@ -112,7 +113,7 @@ func (x *Srl3Device) GetDeployment() string {
 }
 
 func (x *Srl3Device) GetAvailabilityZone() string {
-	if s, ok := x.GetLabels()[LabelNddaAvailabilityZone]; !ok {
+	if s, ok := x.GetLabels()[nddov1.LabelNddaAvailabilityZone]; !ok {
 		return ""
 	} else {
 		return s

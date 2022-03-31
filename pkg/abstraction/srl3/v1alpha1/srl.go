@@ -8,10 +8,11 @@ import (
 	"strings"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
-	networkv1alpha1 "github.com/yndd/ndda-network/apis/network/v1alpha1"
+	//networkv1alpha1 "github.com/yndd/ndda-network/apis/network/v1alpha1"
 	"github.com/yndd/ndda-network/pkg/ndda/itfceinfo"
-	"github.com/yndd/ndda-network/pkg/networkndda"
+	"github.com/yndd/ndda-network/pkg/abstraction"
 	"github.com/yndd/ndda-network/pkg/nodeitfceselector"
+	"github.com/yndd/ndda-network/pkg/ygotndda"
 	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/nddo-runtime/pkg/odns"
 	"github.com/yndd/nddo-runtime/pkg/resource"
@@ -20,7 +21,7 @@ import (
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
 )
 
-func InitSrl(c resource.ClientApplicator, name, platform string) networkndda.Abstraction {
+func InitSrl(c resource.ClientApplicator, name, platform string) abstraction.Abstractor {
 	return &srlabstract{
 		client:   c,
 		name:     name,
@@ -138,7 +139,7 @@ func (x *srlabstract) getNodeItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo,
 							itfceInfo := itfceinfo.NewItfceInfo(
 								itfceinfo.WithInnerVlanId(epgSelector.InnerVlanId),
 								itfceinfo.WithOuterVlanId(epgSelector.OuterVlanId),
-								itfceinfo.WithItfceKind(networkv1alpha1.E_InterfaceKind_INTERFACE),
+								itfceinfo.WithItfceKind(ygotndda.NddaCommon_InterfaceKind_INTERFACE),
 								itfceinfo.WithIpv4Prefixes(epgSelector.Ipv4Prefixes),
 								itfceinfo.WithIpv6Prefixes(epgSelector.Ipv6Prefixes),
 							)
@@ -178,7 +179,7 @@ func (x *srlabstract) getNodeItfcesByNodeItfceSelector(nodeItfceSelectors map[st
 							itfceInfo := itfceinfo.NewItfceInfo(
 								itfceinfo.WithInnerVlanId(itfceInfo.InnerVlanId),
 								itfceinfo.WithOuterVlanId(itfceInfo.OuterVlanId),
-								itfceinfo.WithItfceKind(networkv1alpha1.E_InterfaceKind_INTERFACE),
+								itfceinfo.WithItfceKind(ygotndda.NddaCommon_InterfaceKind_INTERFACE),
 								itfceinfo.WithIpv4Prefixes(itfceInfo.Ipv4Prefixes),
 								itfceinfo.WithIpv6Prefixes(itfceInfo.Ipv6Prefixes),
 							)
