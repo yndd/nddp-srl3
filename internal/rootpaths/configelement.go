@@ -192,7 +192,7 @@ func (ce *configElement) add_internal(pas *PathAndSchema, value *gnmi.TypedValue
 	if !exists {
 		newCE = NewConfigElement(name, ce, elemPath.Key) // generate a new configElement with all required Information
 		// set the Path and Schema information appropriately
-		newCE.PathAndSchema = getPathAndSchemaEntry(resolveRootSchemafromIntermediate(pas.schema), &gnmi.Path{Elem: pas.path.Elem[0 : index+1]})
+		newCE.PathAndSchema = GetPathAndSchemaEntry(resolveRootSchemafromIntermediate(pas.schema), &gnmi.Path{Elem: pas.path.Elem[0 : index+1]})
 		// add the created configElement as a child
 		ce.children[elemPath.hashCode()] = newCE
 		if len(pas.path.Elem)-1 == newCE.getLevel() {

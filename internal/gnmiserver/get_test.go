@@ -1,11 +1,13 @@
 package gnmiserver
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/antchfx/jsonquery"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/yndd/nddp-srl3/internal/model"
@@ -44,8 +46,8 @@ func Test_populateNotification(t *testing.T) {
 	tests := []populateNotificationTestInput{
 		{
 			description: "Test wildcard query with explicit * wildcard",
-			gostruct:    getDev1(),
-			req: getGnmiGetReq(
+			gostruct:    SetupDevice1(),
+			req: SetupGnmiGetReq(
 				[]*gnmi.Path{
 					{
 						Elem: []*gnmi.PathElem{
@@ -62,14 +64,18 @@ func Test_populateNotification(t *testing.T) {
 			ts:     ts,
 			prefix: prefix,
 			resultCheck: []populateNotificationChecker{
-				populateNotificationCheckError(),
+				populateNotificationPrint(),
+				populateNotificationCheckError(false),
 				populateNotificationCheckNumUpdates(1),
+				populateNotificationCheckNumElementsInUpdate(1, "/interface"),
+				populateNotificationCheckNumElementsInUpdate(5, "/interface/*"),
+				populateNotificationCheckNumElementsInUpdate(0, "/system"),
 			},
 		},
 		{
 			description: "Test wildcard query without explicit * wildcard",
-			gostruct:    getDev1(),
-			req: getGnmiGetReq(
+			gostruct:    SetupDevice1(),
+			req: SetupGnmiGetReq(
 				[]*gnmi.Path{
 					{
 						Elem: []*gnmi.PathElem{
@@ -85,14 +91,17 @@ func Test_populateNotification(t *testing.T) {
 			ts:     ts,
 			prefix: prefix,
 			resultCheck: []populateNotificationChecker{
-				populateNotificationCheckError(),
+				populateNotificationCheckError(false),
 				populateNotificationCheckNumUpdates(1),
+				populateNotificationCheckNumElementsInUpdate(1, "/interface"),
+				populateNotificationCheckNumElementsInUpdate(5, "/interface/*"),
+				populateNotificationCheckNumElementsInUpdate(0, "/system"),
 			},
 		},
 		{
 			description: "Test wildcard query without multiple explicit wildcard",
-			gostruct:    getDev1(),
-			req: getGnmiGetReq(
+			gostruct:    SetupDevice1(),
+			req: SetupGnmiGetReq(
 				[]*gnmi.Path{
 					{
 						Elem: []*gnmi.PathElem{
@@ -116,14 +125,15 @@ func Test_populateNotification(t *testing.T) {
 			ts:     ts,
 			prefix: prefix,
 			resultCheck: []populateNotificationChecker{
-				populateNotificationCheckError(),
+				populateNotificationCheckError(false),
 				populateNotificationCheckNumUpdates(1),
+				populateNotificationCheckNumElementsInUpdate(7, "//interface//subinterface//ipv4"),
 			},
 		},
 		{
 			description: "Check without any path elements",
-			gostruct:    getDev1(),
-			req: getGnmiGetReq(
+			gostruct:    SetupDevice1(),
+			req: SetupGnmiGetReq(
 				[]*gnmi.Path{
 					{
 						Elem: []*gnmi.PathElem{},
@@ -135,7 +145,7 @@ func Test_populateNotification(t *testing.T) {
 			ts:     ts,
 			prefix: prefix,
 			resultCheck: []populateNotificationChecker{
-				populateNotificationCheckError(),
+				populateNotificationCheckError(false),
 				populateNotificationCheckNumUpdates(1),
 			},
 		},
@@ -157,9 +167,30 @@ func Test_populateNotification(t *testing.T) {
 	}
 }
 
-// populateNotificationCheckError cehck that no error is raised
-func populateNotificationCheckError() populateNotificationChecker {
+// populateNotificationPrint used to debug tests, prints the result
+func populateNotificationPrint() populateNotificationChecker {
 	return func(notis []*gnmi.Notification, err error) error {
+		if err != nil {
+			fmt.Println("Error: ", err)
+		}
+		for _, n := range notis {
+			fmt.Println("\t" + n.String())
+		}
+		return nil
+	}
+}
+
+// populateNotificationCheckError Checks that an is raised shouldError == true or specifically not raised shoudlError == false
+func populateNotificationCheckError(shouldError bool) populateNotificationChecker {
+	return func(notis []*gnmi.Notification, err error) error {
+		if shouldError {
+			if err == nil {
+				return fmt.Errorf("An error was expected, got error == nil result.")
+			} else {
+				return nil
+			}
+		}
+		// we did not expect an error, so hand back err
 		return err
 	}
 }
@@ -179,8 +210,27 @@ func populateNotificationCheckNumUpdates(x int) populateNotificationChecker {
 	}
 }
 
-// getGnmiGetReq helper to setup a GnmiGetRequest
-func getGnmiGetReq(paths []*gnmi.Path, prefix *gnmi.Path) *gnmi.GetRequest {
+// populateNotificationCheckNumElementsInUpdate queries the first notifications first update, applies the given json query
+// and compares the length of the result with the given count
+func populateNotificationCheckNumElementsInUpdate(count int, path string) populateNotificationChecker {
+	return func(notis []*gnmi.Notification, err error) error {
+
+		r := bytes.NewReader(notis[0].Update[0].GetVal().GetJsonVal())
+		doc, err := jsonquery.Parse(r)
+		if err != nil {
+			return fmt.Errorf("CHECK ERROR: %s", err)
+		}
+
+		list := jsonquery.Find(doc, path)
+		if len(list) != count {
+			return fmt.Errorf("Expected %d items to be returned, got %d", count, len(list))
+		}
+		return nil
+	}
+}
+
+// SetupGnmiGetReq helper to setup a GnmiGetRequest
+func SetupGnmiGetReq(paths []*gnmi.Path, prefix *gnmi.Path) *gnmi.GetRequest {
 	result := &gnmi.GetRequest{
 		Prefix: prefix,
 		Path:   paths,
@@ -188,8 +238,8 @@ func getGnmiGetReq(paths []*gnmi.Path, prefix *gnmi.Path) *gnmi.GetRequest {
 	return result
 }
 
-// getDev1 helper to create a device
-func getDev1() ygot.GoStruct {
+// SetupDevice1 helper to create a device
+func SetupDevice1() ygot.GoStruct {
 	d := &ygotsrl.Device{}
 
 	// v4 only interface

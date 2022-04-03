@@ -60,10 +60,10 @@ func getSortedKeyMapAsString(keys_map map[string]string) string {
 func ConfigElementHierarchyFromGnmiUpdate(yang_schema *yang.Entry, gn *gnmi.Notification) *configElement {
 	rootConfigElement := CreateRootConfigElement(yang_schema)
 	for _, path := range gn.GetDelete() {
-		rootConfigElement.Add(getPathAndSchemaEntry(yang_schema, path), nil)
+		rootConfigElement.Add(GetPathAndSchemaEntry(yang_schema, path), nil)
 	}
 	for _, update := range gn.GetUpdate() {
-		rootConfigElement.Add(getPathAndSchemaEntry(yang_schema, update.Path), update.Val)
+		rootConfigElement.Add(GetPathAndSchemaEntry(yang_schema, update.Path), update.Val)
 	}
 	return rootConfigElement
 }

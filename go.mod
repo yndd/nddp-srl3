@@ -28,7 +28,11 @@ require (
 	k8s.io/client-go v0.22.5
 )
 
-require github.com/golang/mock v1.6.0
+require (
+	github.com/antchfx/jsonquery v1.1.5
+	github.com/go-logr/logr v0.4.0
+	github.com/golang/mock v1.6.0
+)
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
@@ -41,6 +45,7 @@ require (
 	github.com/ProtonMail/go-crypto v0.0.0-20210920160938-87db9fbc61c7 // indirect
 	github.com/Shopify/ejson v1.3.0 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
+	github.com/antchfx/xpath v1.2.0 // indirect
 	github.com/armon/go-metrics v0.3.9 // indirect
 	github.com/aws/aws-sdk-go v1.40.49 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.9.1 // indirect
@@ -65,7 +70,6 @@ require (
 	github.com/go-git/gcfg v1.5.0 // indirect
 	github.com/go-git/go-billy/v5 v5.3.1 // indirect
 	github.com/go-git/go-git/v5 v5.4.2 // indirect
-	github.com/go-logr/logr v0.4.0 // indirect
 	github.com/go-logr/zapr v0.4.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect

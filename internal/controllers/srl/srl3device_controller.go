@@ -28,6 +28,7 @@ import (
 	gnmitypes "github.com/karimra/gnmic/types"
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/ygot/ygot"
+	"github.com/openconfig/ygot/ytypes"
 	"github.com/pkg/errors"
 	ndrv1 "github.com/yndd/ndd-core/apis/dvr/v1"
 	"github.com/yndd/ndd-runtime/pkg/event"
@@ -38,6 +39,7 @@ import (
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 	"github.com/yndd/nddp-srl3/internal/model"
+	"github.com/yndd/nddp-srl3/internal/rootpaths"
 	"github.com/yndd/nddp-srl3/internal/shared"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
@@ -215,7 +217,60 @@ func (v *validatorDevice) ValidateCrSpecDelete(ctx context.Context, mg resource.
 	log := v.log.WithValues("Resource", mg.GetName())
 	log.Debug("validate ValidateCrSpecDelete ...")
 
-	return managed.CrSpecObservation{Success: true}, nil
+	cr, ok := mg.(*srlv1alpha1.Srl3Device)
+	if !ok {
+		return managed.CrSpecObservation{}, errors.New(errUnexpectedDevice)
+	}
+
+	// Validate if the spec has any issues when merged with the actual config
+	runGoStruct, err := v.deviceModel.NewConfigStruct(runningCfg, true)
+	if err != nil {
+		return managed.CrSpecObservation{}, err
+	}
+
+	specGoStruct, err := v.deviceModel.NewConfigStruct(cr.Spec.Properties.Raw, false)
+	if err != nil {
+		return managed.CrSpecObservation{}, err
+	}
+
+	// convert the spec config into gnmi notification
+	notifications, err := ygot.TogNMINotifications(specGoStruct, 0, ygot.GNMINotificationsConfig{UsePathElem: true})
+	if err != nil {
+		return managed.CrSpecObservation{}, err
+	}
+
+	rp := rootpaths.CreateRootConfigElement(v.deviceModel.SchemaTreeRoot)
+
+	// calculate the rootpaths for the deletion
+	for _, n := range notifications {
+		for _, dp := range n.GetUpdate() {
+			// lookup the schema entry for the via path defined node
+			pathAndSchema := rootpaths.GetPathAndSchemaEntry(v.deviceModel.SchemaTreeRoot, dp.Path)
+			rp.Add(pathAndSchema, dp.Val)
+		}
+	}
+
+	// collect the results of the rootpath calculation and performa a delete for
+	// all of these paths on the actual configuration
+	for _, p := range rp.GetRootPaths() {
+		err = ytypes.DeleteNode(v.deviceModel.SchemaTreeRoot, runGoStruct, p)
+		if err != nil {
+			return managed.CrSpecObservation{}, err
+		}
+	}
+
+	ygot.PruneEmptyBranches(runGoStruct)
+
+	if err := runGoStruct.Validate(&ytypes.LeafrefOptions{IgnoreMissingData: false}); err != nil {
+		return managed.CrSpecObservation{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
+
+	return managed.CrSpecObservation{
+		Success: true,
+	}, nil
 }
 
 func (v *validatorDevice) GetCrSpecDiff(ctx context.Context, mg resource.Managed, systemCfg *ygotnddp.Device) (managed.CrSpecDiffObservation, error) {
