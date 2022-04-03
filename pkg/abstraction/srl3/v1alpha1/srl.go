@@ -87,7 +87,7 @@ func (x *srlabstract) GetInterfaceName(itfceName string) (string, error) {
 				spi := strings.Join([]string{split[0], split[1]}, "/")
 				itfceName = strings.Join([]string{"ethernet", spi}, "-")
 			case 3:
-				spi := strings.Join([]string{split[0], split[1], split[2]}, "/")
+				spi := strings.Join([]string{split[1], split[2]}, "/")
 				itfceName = strings.Join([]string{"ethernet", spi}, "-")
 			default:
 				return "", fmt.Errorf("wrong interface naming, got: %s", itfceName)
