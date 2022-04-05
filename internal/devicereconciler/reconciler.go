@@ -150,10 +150,13 @@ func (r *reconciler) run() error {
 	timeout <- true
 
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
-	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+	ce, err := r.cache.GetEntry(crDeviceName)
+	if err != nil {
+		return err
+	}
 
 	// set cache status to up
-	if err := r.cache.SetSystemExhausted(crSystemDeviceName, 0); err != nil {
+	if err := ce.SetSystemExhausted(0); err != nil {
 		return err
 	}
 	for {
@@ -167,7 +170,7 @@ func (r *reconciler) run() error {
 			// -> new updates from k8s operator are received
 			// else dont do anything since we need to wait for an update
 
-			exhausted, err := r.cache.GetSystemExhausted(crSystemDeviceName)
+			exhausted, err := ce.GetSystemExhausted()
 			if err != nil {
 				log.Debug("error getting exhausted", "error", err)
 			} else {
@@ -178,7 +181,7 @@ func (r *reconciler) run() error {
 
 				} else {
 					*exhausted--
-					r.cache.SetSystemExhausted(crSystemDeviceName, *exhausted)
+					ce.SetSystemExhausted(*exhausted)
 				}
 			}
 

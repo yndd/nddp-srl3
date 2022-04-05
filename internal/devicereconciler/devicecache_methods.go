@@ -21,7 +21,7 @@ import (
 
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/ygot/ygot"
-	"github.com/yndd/nddp-srl3/internal/cache"
+	"github.com/yndd/nddp-srl3/internal/device/validator"
 	"github.com/yndd/nddp-srl3/internal/shared"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
 )
@@ -47,22 +47,34 @@ func (r *reconciler) validateCreate(resource *ygotnddp.NddpSystem_Gvk) (ygot.Val
 		return nil, err
 	}
 
-	//r.log.Debug("validateCreate", "x   ", x)
-	//r.log.Debug("validateCreate", "spec", *resource.Spec)
+	ce, err := r.cache.GetEntry(crDeviceName)
+	if err != nil {
+		return nil, err
+	}
 
-	return r.cache.ValidateCreate(crDeviceName, x)
+	return validator.ValidateCreate(ce, x)
 }
 
 // validateDelete deletes the paths from the current config/goStruct and validates the result
 func (r *reconciler) validateDelete(paths []*gnmi.Path) error {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 
-	return r.cache.ValidateDelete(crDeviceName, paths, cache.Origin_Reconciler)
+	ce, err := r.cache.GetEntry(crDeviceName)
+	if err != nil {
+		return err
+	}
+
+	return validator.ValidateDelete(ce, paths, validator.Origin_Reconciler)
 }
 
 // validateUpdate updates the current config/goStruct and validates the result
 func (r *reconciler) validateUpdate(updates []*gnmi.Update, jsonietf bool) error {
 	crDeviceName := shared.GetCrDeviceName(r.namespace, r.target.Config.Name)
 
-	return r.cache.ValidateUpdate(crDeviceName, updates, false, jsonietf, cache.Origin_Reconciler)
+	ce, err := r.cache.GetEntry(crDeviceName)
+	if err != nil {
+		return err
+	}
+
+	return validator.ValidateUpdate(ce, updates, false, jsonietf, validator.Origin_Reconciler)
 }

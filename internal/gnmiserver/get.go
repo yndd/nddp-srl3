@@ -75,13 +75,14 @@ func (s *GnmiServerImpl) HandleGet(req *gnmi.GetRequest) ([]*gnmi.Notification, 
 	// we will need to get rid of this later
 	target = strings.ReplaceAll(target, "ygot.", "")
 
-	if !s.cache.HasTarget(target) {
+	ce, err := s.cache.GetEntry(target)
+	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "cache not ready")
 	}
 
-	goStruct := s.cache.GetValidatedGoStruct(target) // no DeepCopy required, since we get a deepcopy already
+	goStruct := ce.GetRunningConfig() // no DeepCopy required, since we get a deepcopy already
+	model := ce.GetModel()
 	ts := time.Now().UnixNano()
-	model := s.cache.GetModel(target)
 
 	return populateNotification(goStruct, req, model, ts, prefix)
 }

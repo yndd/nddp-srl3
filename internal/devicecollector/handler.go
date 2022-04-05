@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/yndd/ndd-yang/pkg/yparser"
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
-	"github.com/yndd/nddp-srl3/internal/cache"
+	"github.com/yndd/nddp-srl3/internal/device/validator"
 	"github.com/yndd/nddp-srl3/internal/shared"
 	"github.com/yndd/nddp-system/pkg/gvkresource"
 	"github.com/yndd/nddp-system/pkg/ygotnddp"
@@ -39,15 +39,13 @@ func (c *collector) handleSubscription(resp *gnmi.SubscribeResponse) error {
 		// check if the target cache exists
 		crDeviceName := shared.GetCrDeviceName(c.namespace, c.target.Config.Name)
 
-		if !c.cache.HasTarget(crDeviceName) {
+		ce, err := c.cache.GetEntry(crDeviceName)
+		if err != nil {
 			log.Debug("handle target update target not found in ygot schema cache")
 			return errors.New("target cache does not exist")
 		}
 
-		resourceList, err := c.cache.GetSystemResourceList(shared.GetCrSystemDeviceName(crDeviceName))
-		if err != nil {
-			return err
-		}
+		resourceList := ce.GetSystemConfigMap()
 		/*
 			resourceList, err := c.getResourceList(crDeviceName)
 			if err != nil {
@@ -92,8 +90,13 @@ func (c *collector) handleDeletes(crDeviceName string, resourceNames map[string]
 				c.log.Debug("handleDeletes", "crDeviceName", crDeviceName, "path", yparser.GnmiPath2XPath(p, true))
 			}
 		*/
+		ce, err := c.cache.GetEntry(crDeviceName)
+		if err != nil {
+			return err
+		}
+
 		// validate deletes
-		if err := c.cache.ValidateDelete(crDeviceName, delPaths, cache.Origin_Subscription); err != nil {
+		if err := validator.ValidateDelete(ce, delPaths, validator.Origin_Subscription); err != nil {
 			return err
 		}
 
@@ -124,8 +127,13 @@ func (c *collector) handleUpdates(crDeviceName string, resourceNames map[string]
 			}
 		*/
 
+		ce, err := c.cache.GetEntry(crDeviceName)
+		if err != nil {
+			return err
+		}
+
 		// validate updates
-		if err := c.cache.ValidateUpdate(crDeviceName, updates, false, true, cache.Origin_Subscription); err != nil {
+		if err := validator.ValidateUpdate(ce, updates, false, true, validator.Origin_Subscription); err != nil {
 			return err
 		}
 
