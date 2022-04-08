@@ -8,10 +8,8 @@ import (
 	"strings"
 
 	"github.com/openconfig/gnmi/proto/gnmi"
-	//networkv1alpha1 "github.com/yndd/ndda-network/apis/network/v1alpha1"
 	"github.com/yndd/ndda-network/pkg/abstraction"
 	"github.com/yndd/ndda-network/pkg/ndda/itfceinfo"
-	"github.com/yndd/ndda-network/pkg/nodeitfceselector"
 	"github.com/yndd/ndda-network/pkg/ygotndda"
 	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/nddo-runtime/pkg/odns"
@@ -19,6 +17,7 @@ import (
 	srlv1alpha1 "github.com/yndd/nddp-srl3/apis/srl3/v1alpha1"
 	"github.com/yndd/nddp-srl3/internal/model"
 	"github.com/yndd/nddp-srl3/pkg/ygotsrl"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func InitSrl(c resource.ClientApplicator, name, platform string) abstraction.Abstractor {
@@ -28,6 +27,7 @@ func InitSrl(c resource.ClientApplicator, name, platform string) abstraction.Abs
 		platform: platform,
 		// srl device specific model information
 		newSrlDeviceList: func() srlv1alpha1.IFSrl3DeviceList { return &srlv1alpha1.Srl3DeviceList{} },
+		newSrlDevice:     func() srlv1alpha1.IFSrl3Device { return &srlv1alpha1.Srl3Device{} },
 		m: &model.Model{
 			ModelData:       make([]*gnmi.ModelData, 0),
 			StructRootType:  reflect.TypeOf((*ygotsrl.Device)(nil)),
@@ -47,6 +47,7 @@ type srlabstract struct {
 	platform string
 	// generic interface for the device list
 	newSrlDeviceList func() srlv1alpha1.IFSrl3DeviceList
+	newSrlDevice     func() srlv1alpha1.IFSrl3Device
 	// device Model
 	m *model.Model
 }
@@ -99,30 +100,29 @@ func (x *srlabstract) GetInterfaceName(itfceName string) (string, error) {
 	return itfceName, nil
 }
 
-func (x *srlabstract) GetSelectedNodeItfces(ctx context.Context, mg resource.Managed, epgSelectors []*nddov1.EpgInfo, nodeItfceSelectors map[string]*nddov1.ItfceInfo) (*nodeitfceselector.SelectedNodes, error) {
+func (x *srlabstract) GetSelectedItfces(ctx context.Context, mg resource.Managed, deviceName string, epgSelectors []*nddov1.EpgInfo, nodeItfceSelectors map[string]*nddov1.ItfceInfo) (map[string]itfceinfo.ItfceInfo, error) {
 	// get all ndda interfaces within the oda scope
 	// oda is organization, deployement, availability zone
+	// and device name
 	opts := odns.GetClientListOptionFromResourceName(mg.GetName())
+	opts = append(opts, client.MatchingLabels{nddov1.LabelNddaDevice: deviceName})
 	fmt.Printf("opts: %v\n", opts)
-	nddaDevices := x.newSrlDeviceList()
-	if err := x.client.List(ctx, nddaDevices); err != nil {
-		//if err := r.client.List(r.ctx, nddaItfces, opts...); err != nil {
+	nddaDeviceList := x.newSrlDeviceList()
+	if err := x.client.List(ctx, nddaDeviceList, opts...); err != nil {
 		return nil, err
 	}
 
-	selectedNodeItfces := &nodeitfceselector.SelectedNodes{
-		Nodes: map[string]*nodeitfceselector.SelectedInterfaces{},
-	}
-	if err := x.getNodeItfcesByEpgSelector(epgSelectors, nddaDevices, selectedNodeItfces); err != nil {
+	selectedItfces := map[string]itfceinfo.ItfceInfo{}
+	if err := x.getItfcesByEpgSelector(epgSelectors, nddaDeviceList, selectedItfces); err != nil {
 		return nil, err
 	}
-	if err := x.getNodeItfcesByNodeItfceSelector(nodeItfceSelectors, nddaDevices, selectedNodeItfces); err != nil {
+	if err := x.getItfcesByItfceSelector(nodeItfceSelectors, nddaDeviceList, selectedItfces); err != nil {
 		return nil, err
 	}
-	return selectedNodeItfces, nil
+	return selectedItfces, nil
 }
 
-func (x *srlabstract) getNodeItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo, nddaDeviceList srlv1alpha1.IFSrl3DeviceList, selectedNodeItfces *nodeitfceselector.SelectedNodes) error {
+func (x *srlabstract) getItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo, nddaDeviceList srlv1alpha1.IFSrl3DeviceList, selectedItfces map[string]itfceinfo.ItfceInfo) error {
 	for _, d := range nddaDeviceList.GetDevices() {
 		deviceConfig, err := x.getDeviceConfig(d.GetSpec().Properties.Raw)
 		if err != nil {
@@ -135,19 +135,14 @@ func (x *srlabstract) getNodeItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo,
 					fmt.Printf("getNodeItfcesByEpgSelector: %s\n", d.GetName())
 					// avoid selecting lag members
 					if !(i.Ethernet != nil && i.Ethernet.AggregateId != nil) {
-						if _, ok := selectedNodeItfces.Nodes[d.GetDeviceName()]; !ok {
-							itfceInfo := itfceinfo.NewItfceInfo(
+						if _, ok := selectedItfces[itfceName]; !ok {
+							selectedItfces[itfceName] = itfceinfo.NewItfceInfo(
 								itfceinfo.WithInnerVlanId(epgSelector.InnerVlanId),
 								itfceinfo.WithOuterVlanId(epgSelector.OuterVlanId),
 								itfceinfo.WithItfceKind(ygotndda.NddaCommon_InterfaceKind_INTERFACE),
 								itfceinfo.WithIpv4Prefixes(epgSelector.Ipv4Prefixes),
 								itfceinfo.WithIpv6Prefixes(epgSelector.Ipv6Prefixes),
 							)
-							selectedNodeItfces.Nodes[d.GetDeviceName()] = &nodeitfceselector.SelectedInterfaces{
-								Interfaces: map[string]*itfceinfo.ItfceInfo{
-									itfceName: &itfceInfo,
-								},
-							}
 						}
 					}
 				}
@@ -157,7 +152,7 @@ func (x *srlabstract) getNodeItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo,
 	return nil
 }
 
-func (x *srlabstract) getNodeItfcesByNodeItfceSelector(nodeItfceSelectors map[string]*nddov1.ItfceInfo, nddaDeviceList srlv1alpha1.IFSrl3DeviceList, selectedNodeItfces *nodeitfceselector.SelectedNodes) error {
+func (x *srlabstract) getItfcesByItfceSelector(nodeItfceSelectors map[string]*nddov1.ItfceInfo, nddaDeviceList srlv1alpha1.IFSrl3DeviceList, selectedItfces map[string]itfceinfo.ItfceInfo) error {
 	for _, d := range nddaDeviceList.GetDevices() {
 		deviceConfig, err := x.getDeviceConfig(d.GetSpec().Properties.Raw)
 		if err != nil {
@@ -172,22 +167,16 @@ func (x *srlabstract) getNodeItfcesByNodeItfceSelector(nodeItfceSelectors map[st
 				}
 				// avoid selecting lag members
 				if !(i.Ethernet != nil && i.Ethernet.AggregateId != nil) {
-					if deviceName == d.GetDeviceName() &&
-						itfceName == *i.Name {
+					if deviceName == d.GetDeviceName() && itfceName == *i.Name {
 						fmt.Printf("getNodeItfcesByNodeItfceSelector selected: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
-						if _, ok := selectedNodeItfces.Nodes[d.GetDeviceName()]; !ok {
-							itfceInfo := itfceinfo.NewItfceInfo(
+						if _, ok := selectedItfces[itfceName]; !ok {
+							selectedItfces[itfceName] = itfceinfo.NewItfceInfo(
 								itfceinfo.WithInnerVlanId(itfceInfo.InnerVlanId),
 								itfceinfo.WithOuterVlanId(itfceInfo.OuterVlanId),
 								itfceinfo.WithItfceKind(ygotndda.NddaCommon_InterfaceKind_INTERFACE),
 								itfceinfo.WithIpv4Prefixes(itfceInfo.Ipv4Prefixes),
 								itfceinfo.WithIpv6Prefixes(itfceInfo.Ipv6Prefixes),
 							)
-							selectedNodeItfces.Nodes[d.GetDeviceName()] = &nodeitfceselector.SelectedInterfaces{
-								Interfaces: map[string]*itfceinfo.ItfceInfo{
-									itfceName: &itfceInfo,
-								},
-							}
 						}
 					}
 				}

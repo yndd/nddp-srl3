@@ -583,8 +583,10 @@ func setPathWithoutAttribute(op gnmi.UpdateResult_Operation, curNode map[string]
 	target, hasElem := curNode[pathElem.Name]
 	nodeValAsTree, nodeValIsTree := nodeVal.(map[string]interface{})
 	if op == gnmi.UpdateResult_REPLACE || !hasElem || !nodeValIsTree {
-		curNode[pathElem.Name] = nodeVal
-		//fmt.Printf("ValidateUpdate: curNode: %v, nodeVal: %v\n", curNode, nodeVal)
+		fmt.Printf("ValidateUpdate: curNode: %v, nodeVal: %v\n", curNode, nodeVal)
+		if curNode != nil {
+			curNode[pathElem.Name] = nodeVal
+		}
 		return nil
 	}
 	targetAsTree, ok := target.(map[string]interface{})
