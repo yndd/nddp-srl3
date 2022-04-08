@@ -22,7 +22,7 @@ import (
 
 	"github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/yndd/ndd-yang/pkg/yparser"
-	"github.com/yndd/nddp-srl3/internal/cache"
+	"github.com/yndd/nddp-srl3/internal/device/validator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -46,35 +46,19 @@ func (s *GnmiServerImpl) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.S
 	prefix := req.GetPrefix()
 	target := prefix.GetTarget()
 
+	ce, err := s.cache.GetEntry(target)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, errTargetNotFoundInCache)
+	}
+
 	if numReplaces > 0 {
 		log.Debug("Set Replace", "target", prefix.Target, "Path", yparser.GnmiPath2XPath(req.GetReplace()[0].GetPath(), true))
 
 		// if the cache was deleted we can easily update without history
 
-		/* create option overrides the previous gvk
-		v, err := yparser.GetValue(req.GetReplace()[0].GetVal())
-		if err != nil {
+		if err := validator.ValidateUpdate(ce, req.GetReplace(), true, false, validator.Origin_GnmiServer); err != nil {
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
-
-		nddpGoStruct, err := s.cache.ValidateCreate(cacheName, v)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-		*/
-		if err := s.cache.ValidateUpdate(target, req.GetReplace(), true, false, cache.Origin_GnmiServer); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-
-		//log.Debug("Set Replace", "GoStruct", nddpGoStruct)
-		//s.cache.UpdateValidatedGoStruct(target, nddpGoStruct)
-
-		/*
-			if err := s.UpdateCache(prefix, u); err != nil {
-				return nil, status.Errorf(codes.Internal, err.Error())
-			}
-		*/
-
 	}
 
 	if numUpdates > 0 {
@@ -89,13 +73,7 @@ func (s *GnmiServerImpl) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.S
 		return nil, status.Errorf(codes.Unimplemented, "not implemented")
 	}
 
-	/*
-		if err := s.setUpdateStatus(req); err != nil {
-			return nil, status.Errorf(codes.FailedPrecondition, err.Error())
-		}
-	*/
-
-	if err := s.cache.SetSystemCacheStatus(target, true); err != nil {
+	if err := ce.SetSystemCacheStatus(true); err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
@@ -106,103 +84,3 @@ func (s *GnmiServerImpl) Set(ctx context.Context, req *gnmi.SetRequest) (*gnmi.S
 			},
 		}}, nil
 }
-
-/*
-func (s *server) UpdateCache(prefix *gnmi.Path, u *gnmi.Update) error {
-	//v, _ := yparser.GetValue(u.GetVal())
-	//s.log.Debug("UpdateCache", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "val", u.GetVal(), "type", reflect.TypeOf(v))
-	// Validating in the device schema if a key is present
-	hasKey, err := s.hasKey(prefix, u)
-	if err != nil {
-		return err
-	}
-	n, err := s.cache.GetCache().GetNotificationFromUpdate(prefix, u, hasKey)
-	if err != nil {
-		//log.Debug("GetNotificationFromUpdate Error", "Notification", n, "Error", err)
-		return err
-	}
-	//s.log.Debug("UpdateCache", "notification", n)
-	if n != nil {
-
-		if err := s.cache.GetCache().GnmiUpdate(prefix.GetTarget(), n); err != nil {
-			//log.Debug("GnmiUpdate Error", "Notification", n, "Error", err)
-			return err
-		}
-	}
-	return nil
-}
-*/
-
-/*
-func (s *server) DeleteCache(prefix *gnmi.Path, p *gnmi.Path) error {
-	// delete from config cache
-	n, err := s.cache.GetCache().GetNotificationFromDelete(prefix, p)
-	if err != nil {
-		return err
-	}
-
-	//	for _, d := range n.GetDelete() {
-	//		s.log.Debug("gnmiserver delete cache", "notification", yparser.GnmiPath2XPath(d, true))
-	//	}
-	if err := s.cache.GetCache().GnmiUpdate(prefix.GetTarget(), n); err != nil {
-		return err
-	}
-	return nil
-}
-*/
-/*
-func (s *server) setUpdateStatus(req *gnmi.SetRequest) error {
-	crDeviceName := req.GetPrefix().GetTarget()
-	//s.log.Debug("setUpdateStatus", "cacheName", crDeviceName)
-
-	if strings.HasPrefix(crDeviceName, shared.SystemNamespace) {
-		crSystemDeviceName := crDeviceName
-
-		if !s.cache.GetCache().GetCache().HasTarget(crSystemDeviceName) {
-			return status.Error(codes.Unavailable, "cache not ready")
-		}
-
-		n := &gnmi.Notification{
-			Timestamp: time.Now().UnixNano(),
-			Prefix:    &gnmi.Path{Target: crSystemDeviceName},
-			Update: []*gnmi.Update{
-				{
-					Path: &gnmi.Path{
-						Elem: []*gnmi.PathElem{{Name: "cache-update"}},
-					},
-					Val: &gnmi.TypedValue{Value: &gnmi.TypedValue_BoolVal{BoolVal: true}},
-				},
-			},
-		}
-
-		if err := s.cache.GetCache().GnmiUpdate(crSystemDeviceName, n); err != nil {
-			return errors.New("cache update failed")
-		}
-	}
-
-	return nil
-}
-*/
-
-/*
-func (s *server) hasKey(prefix *gnmi.Path, u *gnmi.Update) (bool, error) {
-	// update is for the system cache
-	crDeviceName := prefix.GetTarget()
-	if strings.HasPrefix(crDeviceName, shared.SystemNamespace) {
-		// only handle the cases where the data is updated to the cache
-		if strings.HasPrefix(yparser.GnmiPath2XPath(u.GetPath(), false), "/gvk/data") {
-			//p := yparser.DeepCopyGnmiPath(u.GetPath())
-			p := &gnmi.Path{Elem: u.Path.GetElem()[2:]}
-			// check the device schema if keys exist
-			if len(s.deviceSchema.GetKeys(p)) == 0 {
-				//s.log.Debug("hasKey", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "Bool", false)
-				return false, nil
-			} else {
-				//s.log.Debug("hasKey", "path", yparser.GnmiPath2XPath(u.GetPath(), true), "Bool", true)
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-*/

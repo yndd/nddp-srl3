@@ -266,7 +266,6 @@ func (d *deviceDriver) Stop() error {
 
 func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	crDeviceName := shared.GetCrDeviceName(du.Namespace, du.TargetConfig.Name)
-	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
 	d.devices[crDeviceName] = &deviceInfo{
 		ctx: context.Background(),
@@ -311,8 +310,10 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 	}
 	d.printDeviceCapabilities(cap)
 
+	ce := cache.NewCacheEntry(crDeviceName)
+	ce.SetModel(getDeviceModel(cap))
+
 	/// initialize device model
-	d.cache.SetModel(crDeviceName, getDeviceModel(cap))
 	ddd.deviceCallback = ddd.ygotDeviceCallback
 	ddd.systemCallback = ddd.ygotSystemCallback
 
@@ -322,9 +323,6 @@ func (d *deviceDriver) createDevice(du shared.DeviceUpdate) error {
 		return err
 	}
 	d.log.Debug("deviceDetails", "info", ddd.deviceDetails)
-
-	// initialize the system model
-	d.cache.SetModel(crSystemDeviceName, getSystemModel())
 
 	// get initial config through gnmi
 	ddd.initialConfig, err = ddd.device.GetConfig(d.ctx)
@@ -387,15 +385,12 @@ func (d *deviceDriver) printDeviceCapabilities(gnmiCap []*gnmi.ModelData) {
 
 func (d *deviceDriver) deleteDevice(du shared.DeviceUpdate) error {
 	crDeviceName := shared.GetCrDeviceName(du.Namespace, du.TargetConfig.Name)
-	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 	// stop the collector
 	if ddd, ok := d.devices[crDeviceName]; ok {
 		ddd.collector.Stop()
 	}
 	// clear the cache from the device
-	d.cache.DeleteTarget(crDeviceName)
-	d.cache.DeleteTarget(crSystemDeviceName)
-
+	d.cache.DeleteEntry(crDeviceName)
 	return nil
 }
 
@@ -447,8 +442,12 @@ func (ddd *deviceInfo) validateDeviceConfig() error {
 	//fmt.Println(string(config))
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
+	ce, err := ddd.cache.GetEntry(crDeviceName)
+	if err != nil {
+		ddd.log.Debug("Get Device data from cache", "error", err)
+	}
 
-	rootStruct, err := ddd.cache.GetModel(crDeviceName).NewConfigStruct(config, true)
+	rootStruct, err := ce.GetModel().NewConfigStruct(config, true)
 	if err != nil {
 		ddd.log.Debug("NewConfigStruct Device config error", "error", err)
 		return err
@@ -467,7 +466,11 @@ func (ddd *deviceInfo) ygotDeviceCallback(c ygot.ValidatedGoStruct) error { // A
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 	ddd.log.Debug("ygotDeviceCallback updateValidatedGoStruct", "crDeviceName", crDeviceName)
 
-	ddd.cache.UpdateValidatedGoStruct(crDeviceName, c, false)
+	ce, err := ddd.cache.GetEntry(crDeviceName)
+	if err != nil {
+		return err
+	}
+	ce.SetRunningConfig(c)
 
 	return nil
 }
@@ -493,7 +496,13 @@ func (ddd *deviceInfo) validateSystemConfig() error {
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
 	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
 
-	rootStruct, err := ddd.cache.GetModel(crSystemDeviceName).NewConfigStruct([]byte(nddpJson), true)
+	var ce cache.CacheEntry
+	if ce, err = ddd.cache.GetEntry(crSystemDeviceName); err != nil {
+		ddd.log.Debug("unable to get cache entry", "error", err)
+		return err
+	}
+	model := ce.GetModel()
+	rootStruct, err := model.NewConfigStruct([]byte(nddpJson), true)
 	if err != nil {
 		ddd.log.Debug("NewConfigStruct System config error", "error", err)
 		return err
@@ -511,9 +520,12 @@ func (ddd *deviceInfo) validateSystemConfig() error {
 func (ddd *deviceInfo) ygotSystemCallback(c ygot.ValidatedGoStruct) error { // Apply the config to your device and return nil if success. return error if fails.		/
 
 	crDeviceName := shared.GetCrDeviceName(ddd.namespace, ddd.target.Config.Name)
-	crSystemDeviceName := shared.GetCrSystemDeviceName(crDeviceName)
+	ce, err := ddd.cache.GetEntry(crDeviceName)
+	if err != nil {
+		ddd.log.Debug("Get Device data from cache", "error", err)
+	}
 
-	ddd.cache.UpdateValidatedGoStruct(crSystemDeviceName, c, false)
+	ce.SetRunningConfig(c)
 
 	// we dont validate the cache
 	/*

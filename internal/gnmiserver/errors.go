@@ -31,4 +31,5 @@ const (
 	errInvalidPath             = "invalid Path"
 	errGetValue                = "cannot get Value from update"
 	errGetSubscribe            = "cannot get subscription definition, the subscribe request must contain a subscription definition"
+	errTargetNotFoundInCache   = "could not find target in cache"
 )
