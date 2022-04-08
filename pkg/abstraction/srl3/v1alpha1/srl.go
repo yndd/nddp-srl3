@@ -112,7 +112,7 @@ func (x *srlabstract) GetSelectedItfces(ctx context.Context, mg resource.Managed
 		return nil, err
 	}
 
-	selectedItfces := map[string]itfceinfo.ItfceInfo{}
+	selectedItfces := make(map[string]itfceinfo.ItfceInfo, 0)
 	if err := x.getItfcesByEpgSelector(epgSelectors, nddaDeviceList, selectedItfces); err != nil {
 		return nil, err
 	}
@@ -129,14 +129,15 @@ func (x *srlabstract) getItfcesByEpgSelector(epgSelectors []*nddov1.EpgInfo, ndd
 			return err
 		}
 		for itfceName, i := range deviceConfig.Interface {
-			fmt.Printf("getNodeItfcesByEpgSelector: itfceepg: %s, nodename: %s, itfcename: %s\n", d.GetEndpointGroup(), d.GetDeviceName(), *i.Name)
+			fmt.Printf("getItfcesByEpgSelector: itfceepg: %s, nodename: %s, itfcename: %s\n", d.GetEndpointGroup(), d.GetDeviceName(), *i.Name)
 			for _, epgSelector := range epgSelectors {
 				if epgSelector.EpgName != "" && epgSelector.EpgName == d.GetEndpointGroup() {
-					fmt.Printf("getNodeItfcesByEpgSelector: %s\n", d.GetName())
+					fmt.Printf("getItfcesByEpgSelector: %s\n", d.GetName())
 					// avoid selecting lag members
 					if !(i.Ethernet != nil && i.Ethernet.AggregateId != nil) {
 						if _, ok := selectedItfces[itfceName]; !ok {
 							selectedItfces[itfceName] = itfceinfo.NewItfceInfo(
+								itfceinfo.WithItfceName(itfceName),
 								itfceinfo.WithInnerVlanId(epgSelector.InnerVlanId),
 								itfceinfo.WithOuterVlanId(epgSelector.OuterVlanId),
 								itfceinfo.WithItfceKind(ygotndda.NddaCommon_InterfaceKind_INTERFACE),
@@ -160,7 +161,7 @@ func (x *srlabstract) getItfcesByItfceSelector(nodeItfceSelectors map[string]*nd
 		}
 		for _, i := range deviceConfig.Interface {
 			for deviceName, itfceInfo := range nodeItfceSelectors {
-				fmt.Printf("getNodeItfcesByNodeItfceSelector: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
+				fmt.Printf("getItfcesByItfceSelector: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
 				itfceName, err := x.GetInterfaceName(itfceInfo.ItfceName)
 				if err != nil {
 					return err
@@ -168,9 +169,10 @@ func (x *srlabstract) getItfcesByItfceSelector(nodeItfceSelectors map[string]*nd
 				// avoid selecting lag members
 				if !(i.Ethernet != nil && i.Ethernet.AggregateId != nil) {
 					if deviceName == d.GetDeviceName() && itfceName == *i.Name {
-						fmt.Printf("getNodeItfcesByNodeItfceSelector selected: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
+						fmt.Printf("getItfcesByItfceSelector selected: nodename: %s, itfcename: %s, nodename: %s\n", d.GetDeviceName(), *i.Name, deviceName)
 						if _, ok := selectedItfces[itfceName]; !ok {
 							selectedItfces[itfceName] = itfceinfo.NewItfceInfo(
+								itfceinfo.WithItfceName(itfceName),
 								itfceinfo.WithInnerVlanId(itfceInfo.InnerVlanId),
 								itfceinfo.WithOuterVlanId(itfceInfo.OuterVlanId),
 								itfceinfo.WithItfceKind(ygotndda.NddaCommon_InterfaceKind_INTERFACE),
