@@ -32,7 +32,7 @@ type DeviceSpec struct {
 	// Contains all fields for the specific resource being addressed
 	//+kubebuilder:pruning:PreserveUnknownFields
 	//+kubebuilder:validation:Required
-	Properties runtime.RawExtension `json:"properties,omitempty"` 
+	Properties runtime.RawExtension `json:"properties,omitempty"`
 }
 
 // A DeviceStatus represents the observed state of a Device.

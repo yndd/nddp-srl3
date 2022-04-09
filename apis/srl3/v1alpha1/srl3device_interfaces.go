@@ -48,6 +48,17 @@ type IFSrl3Device interface {
 	resource.Object
 	resource.Conditioned
 
+	GetDeploymentPolicy() nddv1.DeploymentPolicy
+	SetDeploymentPolicy(b nddv1.DeploymentPolicy)
+	GetDeletionPolicy() nddv1.DeletionPolicy
+	SetDeletionPolicy(r nddv1.DeletionPolicy)
+	GetHierPaths() map[string][]string
+	SetHierPaths(n map[string][]string)
+	GetNetworkNodeReference() *nddv1.Reference
+	SetNetworkNodeReference(r *nddv1.Reference)
+	GetRootPaths() []string
+	SetRootPaths(n []string)
+
 	GetCondition(ct nddv1.ConditionKind) nddv1.Condition
 	SetConditions(c ...nddv1.Condition)
 	// getters based on labels
@@ -69,16 +80,6 @@ func (x *Srl3Device) GetOwner() string {
 		return s
 	}
 }
-
-/*
-func (x *Srl3Device) GetDeploymentPolicy() string {
-	if s, ok := x.GetLabels()[LabelNddaDeploymentPolicy]; !ok {
-		return ""
-	} else {
-		return s
-	}
-}
-*/
 
 func (x *Srl3Device) GetDeviceName() string {
 	if s, ok := x.GetLabels()[nddov1.LabelNddaDevice]; !ok {

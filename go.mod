@@ -21,7 +21,7 @@ require (
 	github.com/yndd/ndd-core v0.1.7
 	github.com/yndd/ndd-yang v0.2.7
 	github.com/yndd/ndda-network v0.1.52
-	github.com/yndd/nddo-runtime v0.0.75
+	github.com/yndd/nddo-runtime v0.0.76
 	github.com/yndd/nddp-system v0.2.3
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.22.5
@@ -31,7 +31,6 @@ require (
 require (
 	github.com/antchfx/jsonquery v1.1.5
 	github.com/go-logr/logr v0.4.0
-	github.com/golang/mock v1.6.0
 )
 
 require (

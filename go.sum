@@ -683,7 +683,6 @@ github.com/golang/mock v1.4.1/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt
 github.com/golang/mock v1.4.3/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt3cw=
 github.com/golang/mock v1.4.4/go.mod h1:l3mdAwkq5BuhzHwde/uurv3sEJeZMXNpwsxVWU71h+4=
 github.com/golang/mock v1.5.0/go.mod h1:CWnOUgYIOo4TcNZ0wHX3YZCqsaM1I1Jvs6v3mP3KVu8=
-github.com/golang/mock v1.6.0 h1:ErTB+efbowRARo13NNdxyJji2egdxLGQhRaY+DUumQc=
 github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.3.1/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
@@ -1576,8 +1575,8 @@ github.com/yndd/nddo-runtime v0.0.56/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC
 github.com/yndd/nddo-runtime v0.0.65/go.mod h1:kuq62NH3WPNOQSwslitG0gFAGEwywcmaC9bQQ2cOm0o=
 github.com/yndd/nddo-runtime v0.0.68/go.mod h1:hAZfe7MPU7dMpBz25FTE56hElB5Cgw9ADKMqZ4gJw5k=
 github.com/yndd/nddo-runtime v0.0.72/go.mod h1:eSZogwj8QTfxO6134fdd93h1KfezKDJr4BP8Ew4fkCA=
-github.com/yndd/nddo-runtime v0.0.75 h1:pbN6jeprVRNKe3IO+7g/zIMoN9T4FaeSyA/A8Nf8O0M=
-github.com/yndd/nddo-runtime v0.0.75/go.mod h1:eSZogwj8QTfxO6134fdd93h1KfezKDJr4BP8Ew4fkCA=
+github.com/yndd/nddo-runtime v0.0.76 h1:Sqmdf0ujzVsvLVMVjor10lkPcT616TCGpxfnncruj+Y=
+github.com/yndd/nddo-runtime v0.0.76/go.mod h1:eSZogwj8QTfxO6134fdd93h1KfezKDJr4BP8Ew4fkCA=
 github.com/yndd/nddo-vpc v0.0.4/go.mod h1:muTApxdcuYwWrjM/Zrsq4pXWetshIaiXikoa8+Tv+AA=
 github.com/yndd/nddo-vpc v0.0.5/go.mod h1:l98TClQHm2TtC2dSL1REEvBXiX+Vj/MigwnWpY/ZuvQ=
 github.com/yndd/nddp-srl3 v0.0.1/go.mod h1:lPjUIiSfdBiOjyWsdHbPu9gaLO7D2Q5ROjmw13MxmU4=

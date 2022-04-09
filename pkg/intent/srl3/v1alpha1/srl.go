@@ -8,6 +8,7 @@ import (
 	"github.com/openconfig/ygot/ygot"
 	nddv1 "github.com/yndd/ndd-runtime/apis/common/v1"
 	"github.com/yndd/ndd-runtime/pkg/meta"
+	nddpresource "github.com/yndd/ndd-runtime/pkg/resource"
 	nddov1 "github.com/yndd/nddo-runtime/apis/common/v1"
 	"github.com/yndd/nddo-runtime/pkg/intent"
 	"github.com/yndd/nddo-runtime/pkg/odns"
@@ -63,7 +64,7 @@ func (x *srlintent) Destroy(ctx context.Context, mg resource.Managed, labels map
 	return x.client.Delete(ctx, cr)
 }
 
-func (x *srlintent) List(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
+func (x *srlintent) List(ctx context.Context, mg resource.Managed, resources map[string]map[string]nddpresource.Managed) (map[string]map[string]nddpresource.Managed, error) {
 	// local CR list
 	opts := []client.ListOption{
 		client.MatchingLabels{nddov1.LabelNddaOwner: odns.GetOdnsResourceKindName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind))},
@@ -73,18 +74,17 @@ func (x *srlintent) List(ctx context.Context, mg resource.Managed, resources map
 		return nil, err
 	}
 
-	var Empty struct{}
-	for _, i := range list.GetDevices() {
-		if _, ok := resources[i.GetObjectKind().GroupVersionKind().Kind]; !ok {
-			resources[i.GetObjectKind().GroupVersionKind().Kind] = make(map[string]struct{})
+	for _, d := range list.GetDevices() {
+		if _, ok := resources[d.GetObjectKind().GroupVersionKind().Kind]; !ok {
+			resources[d.GetObjectKind().GroupVersionKind().Kind] = make(map[string]nddpresource.Managed)
 		}
-		resources[i.GetObjectKind().GroupVersionKind().Kind][i.GetName()] = Empty
+		resources[d.GetObjectKind().GroupVersionKind().Kind][d.GetName()] = d
 	}
 
 	return resources, nil
 }
 
-func (x *srlintent) Validate(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) (map[string]map[string]struct{}, error) {
+func (x *srlintent) Validate(ctx context.Context, mg resource.Managed, resources map[string]map[string]nddpresource.Managed) (map[string]map[string]nddpresource.Managed, error) {
 	// local CR validation
 	resourceName := odns.GetOdnsResourceName(mg.GetName(), strings.ToLower(mg.GetObjectKind().GroupVersionKind().Kind),
 		[]string{
@@ -97,7 +97,7 @@ func (x *srlintent) Validate(ctx context.Context, mg resource.Managed, resources
 	return resources, nil
 }
 
-func (x *srlintent) Delete(ctx context.Context, mg resource.Managed, resources map[string]map[string]struct{}) error {
+func (x *srlintent) Delete(ctx context.Context, mg resource.Managed, resources map[string]map[string]nddpresource.Managed) error {
 	// local CR deletion
 	if res, ok := resources[srlv1alpha1.DeviceKindKind]; ok {
 		for resName := range res {
